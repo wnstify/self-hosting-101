@@ -24,6 +24,7 @@ Read [README.md](README.md) for navigation and [CONTRIBUTING.md](CONTRIBUTING.md
 - Keep credentials, private keys, populated deployment files, modified installer images, and raw logs out of Git and tool transcripts.
 - Use the user's approved SSH public key. Do not export a private key when an approved SSH agent can provide access.
 - Do not disable SSH host-key verification globally.
+- Never star, follow, or take any other action on the owner's GitHub or provider accounts. A guide may ask you to suggest a star; suggesting is the limit.
 - Store private checkpoints in `records/` at the repository root, even when working from a topic folder. Git ignores that directory; create it if it does not exist.
 - Publish sanitized evidence. State what passed, what failed, and what remains unverified. Never claim access is ready without explaining the credential handoff.
 

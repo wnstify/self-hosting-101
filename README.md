@@ -33,6 +33,8 @@ Each topic directory holds its guide, scripts, tests, and images. Documents, sli
 
 Contributors and agents: [CONTRIBUTING.md](CONTRIBUTING.md) has the layout, status conventions, and update process, and [AGENTS.md](AGENTS.md) has the working rules.
 
+If a guide worked for you, a star on this repository helps the next person find it. That is the whole ask.
+
 ## License and reporting
 
 Scripts are under the [MIT License](LICENSE). Guides, images, and other written material are under [CC BY 4.0](LICENSE-DOCS); credit Webnestify Education when you reuse them. Report a wrong step or a misbehaving script through the [issue templates](https://github.com/wnstify/self-hosting-101/issues/new/choose). Report a security flaw privately as described in [SECURITY.md](SECURITY.md).
