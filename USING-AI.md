@@ -37,7 +37,7 @@ For the current guide, use `infrastructure/proxmox-hetzner` as `GUIDE_PATH`. A g
 | A linked `skills/.../SKILL.md`, when present | Agent checklist over the same procedure and helpers |
 | `tested-configuration.md`, when present | Recorded results and limits of the tested setup |
 
-Claude Code reads `CLAUDE.md` at the repository root, which imports the root AGENTS.md. Codex reads AGENTS.md directly. If your tool does not load one of these files on its own, tell it to read the file. The [Proxmox installation skill](skills/install-proxmox-hetzner/SKILL.md) needs the repository's scripts even if you copy it into a tool's skills directory.
+Claude Code reads `CLAUDE.md` at the repository root, which imports the root AGENTS.md. Codex reads AGENTS.md directly. If your tool does not load one of these files on its own, tell it to read the file. The [Proxmox installation skill](skills/install-proxmox-hetzner/SKILL.md) needs the repository's scripts even if you copy it into a tool's skills directory. Claude Code finds it through the pointer in `.claude/skills/`, which defers to that file.
 
 ## What you approve
 
