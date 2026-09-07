@@ -3,3 +3,7 @@
 *.toml.example text eol=lf
 *.env.example text eol=lf
 *.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+LICENSE text eol=lf
+LICENSE-DOCS text eol=lf
