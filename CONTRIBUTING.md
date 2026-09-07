@@ -27,6 +27,12 @@ Create optional directories only when there is something to put in them. Keep he
 
 The root `skills/` directory holds agent checklists. Each skill must locate its companion topic directory and use the same scripts as the guide. `.claude/skills/` holds one pointer file per skill so Claude Code discovers it; keep the pointer's name and description in step with the skill and put no procedure in it. The root `records/` directory is git-ignored and holds private deployment evidence.
 
+## Report a problem
+
+Use the issue templates. `Guide correction` is for a step that is wrong or unclear; `Script problem` is for a script that refused, failed, or gave a wrong result. Both require a sanitized report. Blank issues are off. Feature requests and questions about your own setup get closed with a pointer to the video comments. Pull requests that fix a guide or a script are welcome; open an issue first for anything larger.
+
+Security flaws go to the address in [SECURITY.md](SECURITY.md), never to a public issue.
+
 ## Status conventions
 
 Guides are `Planned`, `Draft`, `Available`, or `Archived`. `Planned` means no guide exists yet. `Draft` means work has started but the guide is not ready to follow. `Available` means it is ready within its documented scope. `Archived` guides say why they are no longer maintained and link to a replacement when one exists.

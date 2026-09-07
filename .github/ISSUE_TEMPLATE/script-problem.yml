@@ -1,0 +1,61 @@
+name: Script problem
+description: A script refused to run, failed partway, or did something unexpected.
+labels: ["script"]
+body:
+  - type: input
+    id: script
+    attributes:
+      label: Script
+      placeholder: infrastructure/proxmox-hetzner/install-qemu.sh
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Where it ran
+      options:
+        - Workstation
+        - Rescue
+        - Temporary QEMU guest
+        - Physical Proxmox host
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command as typed
+      description: Replace your real values with placeholders such as SERIAL_1 or SERVER_IP.
+      render: bash
+    validations:
+      required: true
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: What happened
+      options:
+        - It refused before doing anything
+        - It failed partway through
+        - It finished but the result is wrong
+    validations:
+      required: true
+  - type: textarea
+    id: message
+    attributes:
+      label: Exact error or refusal message
+      description: For a systemd unit, add the output of `systemctl show UNIT -p SubState -p ExecMainStatus`.
+      render: text
+    validations:
+      required: true
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before this
+      options:
+        - label: The syntax checks and the CHECK_ONLY or preflight run passed before this happened.
+  - type: checkboxes
+    id: sanitized
+    attributes:
+      label: Sanitized
+      options:
+        - label: I removed addresses, disk serials, MAC addresses, keys, passwords, and raw logs from this report.
+          required: true

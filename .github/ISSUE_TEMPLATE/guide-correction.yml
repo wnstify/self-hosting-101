@@ -1,0 +1,50 @@
+name: Guide correction
+description: A step in a written guide is wrong, unclear, or out of date.
+labels: ["guide"]
+body:
+  - type: input
+    id: guide
+    attributes:
+      label: Guide and step
+      description: File path and the numbered step or heading.
+      placeholder: infrastructure/proxmox-hetzner/verification.md, step 7
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Where the command ran
+      options:
+        - Workstation
+        - Rescue
+        - Temporary QEMU guest
+        - Physical Proxmox host
+        - Not a command, text only
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What the guide says should happen
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+      description: Paste sanitized output in a code block.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: revision
+    attributes:
+      label: Guide revision
+      description: Commit hash, tag, or the date you read it. If you followed a video, add its timestamp.
+  - type: checkboxes
+    id: sanitized
+    attributes:
+      label: Sanitized
+      options:
+        - label: I removed addresses, disk serials, MAC addresses, keys, and passwords from this report.
+          required: true
