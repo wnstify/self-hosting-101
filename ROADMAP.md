@@ -1,12 +1,12 @@
 # Roadmap
 
-This series will grow as new setups are built and recorded. Topics below are candidates; their order and choice of tools can change. Add concrete guides when work begins.
+This series grows as new setups are built and recorded. The topic ideas below may change in order or choice of tools. Add a draft guide when work begins.
 
 ## Current work
 
 | Topic | Guide | Video | Companion materials |
 |---|---|---|---|
-| [Proxmox on Hetzner](infrastructure/proxmox-hetzner/README.md) | Available, with a tested configuration | Recording | Not yet added |
+| [Proxmox on Hetzner](infrastructure/proxmox-hetzner/README.md) | Available, see [tested configuration](infrastructure/proxmox-hetzner/tested-configuration.md) | Recording | Not yet added |
 
 ## Topic ideas
 
@@ -21,7 +21,7 @@ This series will grow as new setups are built and recorded. Topics below are can
 
 ## Status conventions
 
-Use `Planned`, `Draft`, `Available`, or `Archived` for guides. `Available` means the guide is ready to follow within its documented scope; record validation separately and state untested parts. `Archived` guides must explain why they are no longer maintained and link to a replacement when one exists.
+Use `Planned`, `Draft`, `Available`, or `Archived` for guides. `Planned` means no guide exists yet. `Draft` means work has started, but the guide is not ready to follow. `Available` means it is ready within its documented scope. Record validation separately and state untested parts. `Archived` guides must explain why they are no longer maintained and link to a replacement when one exists.
 
 Track videos separately as `Planned`, `Recording`, or `Published`. Add a YouTube link only after publication. Record documents and slides as available only when their files or public links exist.
 

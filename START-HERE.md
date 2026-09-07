@@ -16,7 +16,7 @@ For the first guide, you need a Hetzner dedicated server that matches the docume
 
 [Proxmox on Hetzner](infrastructure/proxmox-hetzner/README.md) is the first guide. Its [test record](infrastructure/proxmox-hetzner/tested-configuration.md) describes the configuration that was tested and the checks that passed.
 
-Later guides will list their own prerequisites and link to earlier topics when needed. The [roadmap](ROADMAP.md) contains ideas, not instructions to run.
+Later guides will list their own prerequisites and link to earlier topics when needed. Planned topics in the [roadmap](ROADMAP.md) have no installation instructions yet.
 
 ## Choose how to work
 

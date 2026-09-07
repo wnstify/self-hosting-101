@@ -4,7 +4,7 @@ Install Proxmox VE on a Hetzner dedicated server using legacy BIOS. People and A
 
 [Infrastructure](../README.md) · [Episode index](../../episodes/README.md) · [Teaching materials](materials/README.md)
 
-Guide status: available within the tested scope below. The first video is being recorded; companion documents and slides have not been added yet.
+This guide is available for the tested configuration below. The first video is being recorded. Companion documents and slides have not been added yet.
 
 For workstation commands, start in this guide's directory. From the repository root, run:
 
@@ -20,9 +20,9 @@ Install Proxmox from the official ISO over SSH, using QEMU/KVM to expose two phy
 
 This guide covers Proxmox, a ZFS mirror, host networking, updates, and verification. Pangolin and guest workloads are outside this guide. See the [tested configuration](tested-configuration.md) for validation results and supported scope.
 
-**Tested on 2026-09-07:** a clean BIOS installation on a Hetzner AX41 passed the installed-guest boot, physical boot, and post-update reboot. The result is Proxmox 9.2.11, kernel 7.0.14-15-pve, and a healthy two-NVMe ZFS mirror. No bootloader recovery was needed. The test also verified key-only SSH, localhost GUI authentication, disabled IPv6, working DNS, synchronized time, and zero pending updates.
+On 2026-09-07, a clean BIOS installation on a Hetzner AX41 passed the installed-guest boot, physical boot, and post-update reboot. It ran Proxmox 9.2.11 and kernel 7.0.14-15-pve with a healthy two-NVMe ZFS mirror. No bootloader recovery was needed. The test also verified key-only SSH, localhost GUI authentication, disabled IPv6, working DNS, synchronized time, and zero pending updates.
 
-**Legacy BIOS is mandatory.** This guide has one supported boot mode: legacy BIOS for Rescue, the temporary QEMU guest, and the physical Proxmox server. The example already sets `FIRMWARE_MODE=bios`; leave it that way. Both launchers reject UEFI or a missing/invalid setting. They also stop if Rescue itself booted in UEFI.
+**Legacy BIOS is mandatory** for Rescue, the temporary QEMU guest, and the physical Proxmox server. Keep the example's `FIRMWARE_MODE=bios` setting. Both launchers reject UEFI and missing or invalid settings. They also stop if Rescue itself booted in UEFI.
 
 The tested configuration is an AMD AX41 with two NVMe drives and a gateway inside the IPv4 subnet. Other hardware, storage layouts, Intel microcode selection, and routed `/32` networks require their own validation.
 
@@ -53,14 +53,14 @@ scp preflight.sh root@SERVER_IP:/root/preflight.sh
 ssh root@SERVER_IP 'bash /root/preflight.sh'
 ```
 
-In Rescue, read the health of each intended drive:
+In Rescue, read the health of each intended drive. Replace these device paths with the ones identified by preflight:
 
 ```bash
 smartctl -H -A /dev/nvme0n1
 smartctl -H -A /dev/nvme1n1
 ```
 
-Record these values before continuing:
+Record these values before continuing. Run the inventory commands in Rescue:
 
 | Value | Where to get it |
 |---|---|
@@ -74,7 +74,7 @@ Record these values before continuing:
 
 Check mounts, swap, `/proc/mdstat`, and disk holders. An existing Debian installation may have active software RAID even when nothing is mounted. Inspect and stop only the affected arrays after approving their destruction. The installer refuses disks with active holders.
 
-Hetzner's `zpool` command may be a wrapper that installs ZFS. Do not invoke it as an inventory command unless ZFS is already loaded. If `/sys/module/zfs` exists, inspect `zpool status -LP` and export any affected pool before using its disks in QEMU.
+Hetzner's `zpool` command may be a wrapper that installs ZFS. Do not invoke it as an inventory command unless ZFS is already loaded. If `/sys/module/zfs` exists, inspect `zpool status -LP`. Review any affected pool before exporting it, and keep it exported while QEMU uses its disks.
 
 ## 3. Copy the scripts
 
@@ -121,7 +121,7 @@ In `answer.toml`, replace the FQDN, contact email, country, timezone, IPv4/prefi
 
 Set stable physical `/dev/disk/by-id/` paths and live serials in `install.env`. Keep `FIRMWARE_MODE=bios`, as supplied in the example. Legacy BIOS is required. Also set `GUEST_CIDR` and `GUEST_GATEWAY` to match `answer.toml` for the installed-guest test. The answer's `nvme0n1` and `nvme1n1` refer to the two NVMe controllers presented inside QEMU; they are not copied blindly from the physical server's device ordering.
 
-Use only the SSH public keys you want on the installed host. If the Rescue authorized-keys file contains exactly those plain public-key lines:
+Use only the SSH public keys you want on the installed host. If the Rescue authorized-keys file contains exactly those plain public-key lines, run in Rescue:
 
 ```bash
 python3 set-answer-credentials.py answer.toml /root/.ssh/authorized_keys
@@ -131,7 +131,7 @@ The helper prompts for a root password twice without echoing it, hashes it with 
 
 Agents can use `--random-password` to discard the installer password, then set a usable password over verified SSH later. This path was used in the AX41 installation test.
 
-The supplied first-boot hook disables IPv6 through sysctl and adds `ipv6.disable=1` to the installed kernel command line. Use it only if that is your intended policy. Kernel-level IPv6 disablement can affect Proxmox firewall backends; firewall deployment is outside this guide.
+The builder always includes the supplied first-boot hook. It disables IPv6 through sysctl and adds `ipv6.disable=1` to the installed kernel command line. Confirm this policy before building the installer. If you need IPv6, stop here; that configuration needs a separately validated workflow. Kernel-level IPv6 disablement can affect Proxmox firewall backends. Firewall deployment is outside this guide.
 
 ## 5. Download and verify the ISO
 
@@ -158,7 +158,7 @@ systemd-run --unit=pve-build-installer --property=Type=exec \
 
 The builder installs QEMU/KVM prerequisites in Rescue and builds a separate Debian 13 chroot for the Proxmox installation assistant. It verifies the repository signing-key fingerprint and validates the answer file. Its package repository uses the [official signed HTTP repository](https://github.com/proxmox/pve-docs/blob/master/pve-package-repos.adoc); ISO and signing-key downloads use HTTPS.
 
-Monitor it:
+Monitor it in Rescue:
 
 ```bash
 systemctl show pve-build-installer -p ActiveState -p SubState -p ExecMainStatus
@@ -185,7 +185,7 @@ ERASE_CONFIRMED=YES CHECK_ONLY=1 /tmp/proxmox-auto/install-qemu.sh
 
 The preflight must print both expected serials and `Preflight passed; QEMU was not started`. Supplying `ERASE_CONFIRMED=YES` is appropriate only after you have approved the exact disk identities. Agents must obtain that approval from the owner; the environment flag is not a substitute for it.
 
-Start the destructive installation:
+Start the destructive installation in Rescue:
 
 ```bash
 systemd-run --unit=pve-install-qemu --property=Type=exec \
@@ -196,7 +196,7 @@ The prepared ISO selects the automated installer and powers QEMU off when instal
 
 ![Automated installer selected](images/installer-menu.png)
 
-Monitor the unit and capture the QEMU screen when needed:
+In Rescue, monitor the unit and capture the QEMU screen when needed:
 
 ```bash
 systemctl show pve-install-qemu -p ActiveState -p SubState -p ExecMainStatus
@@ -219,7 +219,12 @@ If the installed system works in QEMU but the physical server does not boot, use
 
 Agents should read the [root rules](../../AGENTS.md), [topic rules](AGENTS.md), and dedicated [install-proxmox-hetzner skill](../../skills/install-proxmox-hetzner/SKILL.md). Keep the skill with this checkout, or copy its directory to your agent's skills folder and point it to the checkout. The skill follows the same scripts and checkpoints as this tutorial. See [using an AI agent](../../USING-AI.md) for a starting prompt.
 
-For local maintenance checks, run `python tests/test-firmware-policy.py` from this guide's directory on your workstation. It tests both launchers without server access or disks.
+For local maintenance checks, run these commands from this guide's directory on your workstation. They require Python 3.11 or later, Bash for the firmware tests, and `ssh-keygen` for the credential tests. They use no server access or disks:
+
+```text
+python tests/test-firmware-policy.py
+python tests/test-answer-credentials.py
+```
 
 For live preflight checks, [preflight-refusals.sh](tests/preflight-refusals.sh) tests missing approval, missing/invalid firmware mode, UEFI, duplicate disks, and a wrong serial against a reviewed live configuration. Copy it into `tests/` beneath the Rescue work directory, export the reviewed `install.env` values, and run it with Bash after building the ISO. Every invocation forces `CHECK_ONLY=1`; it does not launch QEMU. These tests supplement the installed-guest and physical-boot checks.
 

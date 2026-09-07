@@ -1,23 +1,38 @@
 # Verify the installation and boot the server
 
-Continue here after the installer reports success and `pve-install-qemu.service` is inactive with exit status 0. Legacy BIOS is required at every boot checkpoint. A UEFI result is a failed check: stop and arrange a legacy BIOS boot before continuing. Commands are grouped by the machine on which they run.
+Continue here after the installer reports success and `pve-install-qemu.service` is inactive with exit status 0. Legacy BIOS is required at every boot checkpoint. If a check reports UEFI, stop and arrange a legacy BIOS boot before continuing. Each command block names the machine on which it runs.
 
 Workstation commands assume `infrastructure/proxmox-hetzner` is your current directory, as in the [installation guide](README.md). Keep the local `installed-known-hosts` file there for the commands below. Store private deployment evidence in `records/` at the repository root.
 
 ## 1. Check both boot partitions in Rescue
 
-Confirm the installer unit is inactive with `SubState=dead` and `ExecMainStatus=0`. Load the reviewed `install.env`, then reread the partition tables on the two approved disks. Do not import the ZFS pool or start QEMU while a boot partition is mounted.
+For the initial installation, confirm in Rescue that the installer unit is inactive with `SubState=dead` and `ExecMainStatus=0`:
+
+```bash
+(
+set -eu
+test "$(systemctl show pve-install-qemu -p SubState --value)" = dead
+test "$(systemctl show pve-install-qemu -p ExecMainStatus --value)" = 0
+)
+```
+
+These checks apply to the current Rescue session. After a Rescue reboot, the transient installer unit is gone. Follow [boot recovery](boot-recovery.md) to recreate the work directory and inspect current storage before using the disk inspection below.
+
+### Inspect the approved disks
+
+In Rescue, confirm that no QEMU process is using either approved disk. The block below holds the shared launchers' lock and checks live serials, mounts, swap, holders, and imported pools before rereading partition tables. A QEMU process started outside those launchers does not hold this lock, so check for it separately. Stop on any failed check. Do not import the ZFS pool or start QEMU while a boot partition is mounted.
 
 For this NVMe layout, each whole-disk stable path has a `-part2` link for its boot partition. Inspect both read-only:
 
 ```bash
 (
-set -eu
+set -euo pipefail
 . /tmp/proxmox-auto/install.env
 test "$FIRMWARE_MODE" = bios
 test ! -d /sys/firmware/efi
-test "$(systemctl show pve-install-qemu -p SubState --value)" = dead
-test "$(systemctl show pve-install-qemu -p ExecMainStatus --value)" = 0
+exec 9>/run/lock/proxmox-auto-install.lock
+flock -n 9 || { echo 'A QEMU operation holds the disk lock; stop and inspect it' >&2; exit 1; }
+( . /tmp/proxmox-auto/check-disks.sh )
 for disk in "$TARGET_DISK_1" "$TARGET_DISK_2"; do blockdev --rereadpt "$disk"; done
 udevadm settle
 lsblk -e 1,7 -o NAME,SIZE,FSTYPE,PARTTYPE,MOUNTPOINTS
@@ -39,9 +54,9 @@ Both disks should have a BIOS boot partition, a VFAT boot partition, and a `zfs_
 
 ## 2. Boot the installed disks temporarily
 
-In Rescue, check that `GUEST_CIDR`, `GUEST_GATEWAY`, in `install.env` match the answer and `FIRMWARE_MODE=bios` is unchanged. This helper requires a distinct gateway inside an IPv4 subnet of `/30` or larger. A routed `/32` needs an adapted QEMU test network.
+In Rescue, check that `GUEST_CIDR` and `GUEST_GATEWAY` in `install.env` match the answer and `FIRMWARE_MODE=bios` is unchanged. This helper requires a distinct gateway inside an IPv4 subnet of `/30` or larger. A routed `/32` needs an adapted QEMU test network and separate validation.
 
-Start the verification guest:
+Start the verification guest in Rescue:
 
 ```bash
 systemd-run --unit=pve-verify-qemu --property=Type=exec \
@@ -50,7 +65,7 @@ systemd-run --unit=pve-verify-qemu --property=Type=exec \
 
 This boots the disks without attaching the installer ISO. It reuses the disk-identity checks and legacy BIOS. SSH is forwarded to `127.0.0.1:2222` on Rescue, with no public forwarded port.
 
-For recovery after a Rescue reboot, copy `boot-installed-qemu.sh`, `check-disks.sh`, and `qemu-screen.py` into a new private work directory and rebuild `install.env` from live serials. Device names may have swapped. The boot helper does not need the installer ISO or erase flag. It always boots using BIOS.
+For recovery after a Rescue reboot, first follow the setup in [boot recovery](boot-recovery.md). The boot helper does not need the installer ISO or erase flag. It always boots using BIOS.
 
 Wait for the guest to boot. Inspect `pve-verify-qemu.service` and use `qemu-screen.py` if SSH does not become available.
 
@@ -107,13 +122,13 @@ timedatectl status
 )
 ```
 
-Require BIOS, then confirm the chosen FQDN and network values, both ZFS mirror members online with no errors, both ESPs configured, first-boot success, active Proxmox services, HTTP 200, and working DNS. The `.link` file must match the physical MAC so `nic0` is retained when the system moves from virtual to physical hardware.
+Require BIOS, then confirm the chosen FQDN and network values. Both ZFS mirror members must be online without errors, and both boot partitions must be configured. Check first-boot success, active Proxmox services, HTTP 200, and working DNS. The `.link` file must match the physical MAC so the physical interface keeps the name `nic0`.
 
 The first-boot hook applies sysctl immediately and adds `ipv6.disable=1` for the next boot. Confirm the kernel flag after the physical reboot.
 
 ## 5. Set up administrative access
 
-If you chose a password interactively before installation, keep using that password. If an agent discarded the installer password, either run `passwd` yourself over verified SSH or have the agent generate an initial password privately on the installed host:
+If you chose a password interactively before installation, keep using that password. If an agent discarded the installer password, run `passwd` yourself over verified SSH inside the installed guest. Alternatively, have the agent generate an initial password privately inside that guest:
 
 ```bash
 (
@@ -205,7 +220,7 @@ scp configure-no-subscription.sh root@SERVER_IP:/root/configure-no-subscription.
 ssh root@SERVER_IP
 ```
 
-On Proxmox, use the no-subscription repository if you do not have a subscription:
+On the physical Proxmox host, use the no-subscription repository if you do not have a subscription:
 
 ```bash
 sed -i 's/\r$//' /root/configure-no-subscription.sh
@@ -218,7 +233,7 @@ tail -20 /root/pve-initial-update.log
 
 Wait for successful completion before rebooting. The script is intended for a fresh Debian 13/Proxmox 9 installation with its default repository files. Inspect custom or duplicate repository entries separately. It retains package signature verification and does not remove the subscription notice from the UI.
 
-Check time synchronization on the physical host. If `timedatectl show -p NTPSynchronized` stays `no`, inspect `chronyc -n sources` and `journalctl -u chrony -b`. A source with reach `0` has not returned usable replies. Test a provider time server without changing the clock:
+Check time synchronization on the physical Proxmox host. If `timedatectl show -p NTPSynchronized` stays `no`, inspect `chronyc -n sources` and `journalctl -u chrony -b`. A source with reach `0` has not returned usable replies. On that host, test a provider time server without changing the clock:
 
 ```bash
 chronyd -Q -t 10 -f /dev/null 'server ntp1.hetzner.de iburst'
@@ -240,7 +255,9 @@ systemctl restart chrony
 )
 ```
 
-Allow time for replies, then require `NTPSynchronized=yes` and a selected source (`^*` in `chronyc -n sources`). If no time server answers, investigate DNS and network filtering instead of treating the check as passed. This fallback was needed in the clean AX41 test.
+Allow time for replies, then require `NTPSynchronized=yes` and a selected source marked `^*` in `chronyc -n sources`. If no time server answers, investigate DNS and network filtering. This fallback was needed in the clean AX41 test.
+
+After the update and time checks pass, reboot the physical Proxmox host:
 
 ```bash
 systemctl reboot
@@ -248,7 +265,7 @@ systemctl reboot
 
 ## 8. Final verification and GUI login
 
-Reconnect after reboot and run:
+Reconnect after reboot and run on the physical Proxmox host:
 
 ```bash
 (
@@ -267,7 +284,11 @@ pvesm status
 ip -4 -br addr
 ip -4 route
 cat /proc/cmdline
-test ! -d /proc/sys/net/ipv6 && echo 'IPv6 disabled in the kernel'
+if test -d /proc/sys/net/ipv6; then
+    echo 'ERROR: IPv6 is still enabled; stop and inspect the first-boot settings' >&2
+    exit 1
+fi
+echo 'IPv6 disabled in the kernel'
 systemctl is-active pve-cluster pvedaemon pveproxy pvestatd
 systemctl --failed --no-pager
 curl -kfsS -o /dev/null -w '%{http_code}\n' https://127.0.0.1:8006/
@@ -288,7 +309,7 @@ ssh -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 \
 
 Visit `https://localhost:8006` and log in as `root` with the **Linux PAM** realm. The fresh Proxmox certificate is self-signed; the tunnel protects the connection to the SSH-verified server.
 
-If an initial password file was generated, retrieve it only in your own terminal:
+If an initial password file was generated, retrieve it only in your own workstation terminal:
 
 ```bash
 ssh root@SERVER_IP 'cat /root/proxmox-initial-password'

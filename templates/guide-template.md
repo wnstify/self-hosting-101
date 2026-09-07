@@ -5,10 +5,12 @@ Replace this text with the outcome and scope. Copy this template into the topic 
 | Detail | Value |
 |---|---|
 | Status | Draft |
-| Video | Not published |
-| Last verified | Not yet verified |
+| Video | Planned |
+| Validation | Not yet verified |
 | Tested configuration | Describe it or link to the local test record |
 | Materials | Link the materials index when available |
+
+Use the repository's status conventions. For validation, record the test date, configuration, checks performed, and untested parts. State whether checks were local or ran on a live deployment.
 
 ## Prerequisites
 

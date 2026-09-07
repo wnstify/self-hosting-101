@@ -1,10 +1,10 @@
 # Using an AI agent
 
-You can give these guides to Claude Code, Codex, Cursor, or another agent that can read your checkout. Use the explicit prompt below so the workflow does not depend on automatic instruction discovery. Tool-specific integrations are not required for this approach, and compatibility has not been tested across every agent.
+Use these guides with Claude Code, Codex, Cursor, or another agent that can read your local copy of the repository. Start with the prompt below to tell the agent which instructions to read. This approach needs no tool-specific integration, but it has not been tested with every agent.
 
 ## Starting prompt
 
-Open a checkout in your tool and replace `GUIDE_PATH` and the task description:
+Open the repository in your tool and replace `GUIDE_PATH` and `DESCRIBE_THE_OUTCOME`:
 
 ```text
 I am using the Self-Hosting 101 repository.
@@ -41,7 +41,7 @@ If your tool does not load one of these files automatically, tell it to read the
 
 ## Working on a server
 
-An inspection request authorizes read-only checks. Installation needs approval for the actual server, disk serials, storage layout, and IPv6 policy. Existing approval remains valid while that scope stays the same.
+An inspection request authorizes read-only checks. Before destructive work, approve the target and affected resources required by the selected guide. For Proxmox on Hetzner, installation approval covers the actual server, disk serials, storage layout, and IPv6 policy. Existing approval remains valid while that scope stays the same.
 
 Use your SSH agent or another approved local credential method. Do not paste private keys, passwords, populated answer files, or raw installation logs into the conversation. Keep private checkpoints under the git-ignored root `records/` directory.
 
