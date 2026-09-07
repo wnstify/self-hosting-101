@@ -1,16 +1,16 @@
-# Troubleshoot a failed legacy BIOS boot
+# Inspect a failed legacy BIOS boot
 
-Legacy BIOS is the only supported boot mode for this guide. If the physical server does not return after installation, inspect the existing installation. Do not rerun `install-qemu.sh` or wipe disks.
+Use this when the installed system booted in QEMU but the physical server does not come back. It gets you back into Rescue, restores the tools, and tells you what to look at. It does not repair anything: no tested repair path exists yet, and this guide does not guess at one. Do not rerun `install-qemu.sh` or wipe the disks.
 
 ## Return to Rescue
 
-Activate Linux Rescue with the intended SSH key in the provider panel and reset the server. Verify any changed SSH host fingerprint before updating the saved entry. Keep the installed Proxmox host key recorded during verification.
+Activate Linux Rescue with the intended SSH key in the provider panel and reset the server. Verify any changed SSH host fingerprint before updating the saved entry. Keep the installed Proxmox host key you captured during verification.
 
-Copy and run `preflight.sh` again using the workstation commands in [installation step 2](README.md#2-collect-the-server-values). Device names can change after a reboot, so identify the approved disks by serial and use their stable by-id paths. Check that Rescue reports BIOS. If it reports UEFI, arrange a legacy BIOS boot through the provider console or support before continuing.
+Copy and run `preflight.sh` again with the workstation commands in [installation step 2](README.md#2-collect-the-server-values). Device names can change after a reboot, so identify the approved disks by serial and use their stable by-id paths. Preflight must report `BOOT_MODE=BIOS`. If it reports UEFI, arrange a legacy BIOS boot through the provider console or support before continuing.
 
 ## Restore the Rescue work directory
 
-The previous Rescue session's temporary files, installed packages, and transient systemd units do not survive reboot. In Rescue, recreate the private work directory and install the verification helper's dependencies:
+Temporary files, installed packages, and transient systemd units from the previous Rescue session are gone. In Rescue, recreate the private work directory and install what the boot helper needs:
 
 ```bash
 (
@@ -21,37 +21,36 @@ apt-get install -y qemu-system-x86 python3
 )
 ```
 
-From `infrastructure/proxmox-hetzner/` on the workstation, copy the helpers and environment template:
+From `infrastructure/proxmox-hetzner/` on the workstation, copy the helpers and the environment template:
 
 ```bash
 scp boot-installed-qemu.sh check-disks.sh qemu-screen.py install.env.example root@SERVER_IP:/tmp/proxmox-auto/
 ```
 
-In Rescue, normalize the copied scripts and check their syntax:
+In Rescue, normalize line endings and check syntax:
 
 ```bash
 (
 set -eu
 cd /tmp/proxmox-auto
-sed -i 's/\r$//' boot-installed-qemu.sh check-disks.sh qemu-screen.py
-chmod 0700 boot-installed-qemu.sh check-disks.sh qemu-screen.py
-bash -n boot-installed-qemu.sh
-bash -n check-disks.sh
+sed -i 's/\r$//' ./*.sh ./*.py ./*.example
+chmod 0700 ./*.sh
+for script in ./*.sh; do bash -n "$script"; done
 test ! -e install.env
 cp install.env.example install.env
 chmod 0600 install.env
 )
 ```
 
-Stop if a check fails. If `install.env` already exists, review it before changing it. In Rescue, edit `/tmp/proxmox-auto/install.env` using the approved disk identities, live serials, and installed network settings. Keep `FIRMWARE_MODE=bios`. The boot helper requires neither the installer ISO nor an erase flag.
+Stop if a check fails. If `install.env` already exists, review it before changing it. In Rescue, edit `/tmp/proxmox-auto/install.env` with the approved disk identities, live serials, and installed network settings. Keep `FIRMWARE_MODE=bios`. The boot helper needs neither the installer ISO nor an erase flag.
 
-## Inspect the boot files and installed system
+## Inspect the boot files and the installed system
 
-Confirm that no QEMU process is using the approved disks and review mounts, swap, RAID/device-mapper holders, and imported ZFS pools. Then run [the shared disk inspection](verification.md#inspect-the-approved-disks) in Rescue. It checks live disk identities and active storage before mounting either boot partition read-only. The initial-installation unit checks above that block apply only to the original Rescue session.
+In Rescue, run [the shared disk inspection](verification.md#inspect-the-approved-disks). It confirms no launcher holds the disk lock, checks the live serials and active storage, then mounts each boot partition read-only. Skip the installer-unit check above that block; it belongs to the original Rescue session. Check for a stray QEMU process with `pgrep -a qemu` first, since one started outside the launchers does not hold the lock.
 
-Both disks need BIOS GRUB, kernel, and initrd files. If a file is missing, record the failure and investigate before modifying anything.
+Both disks need BIOS GRUB, a kernel, and an initrd. If a file is missing, record which one and on which disk before changing anything.
 
-Start the installed guest using the verification guide's systemd unit and connect using its previously recorded SSH host key. Inside the guest, inspect:
+Start the installed guest with the verification guide's `pve-verify-qemu` unit and connect with the host key you recorded. Inside the guest, inspect:
 
 ```bash
 journalctl --list-boots --no-pager
@@ -62,10 +61,14 @@ ip -4 route
 cat /usr/local/lib/systemd/network/50-pmx-nic0.link
 ```
 
-Follow [the installed-guest checks](verification.md#4-check-the-installed-guest) too. Require BIOS, the expected disk serials and network configuration, and a healthy mirror. If the guest boots but the physical server does not, inspect the physical console for the boot order and error message. A successful QEMU boot does not verify the physical firmware settings or network interface.
+Then follow [the installed-guest checks](verification.md#4-check-the-installed-guest). Require BIOS, the expected disk serials and network configuration, and a healthy mirror. If the guest boots but the physical server does not, the difference is in the firmware boot order, the physical NIC, or the console error message. Read the provider console; a successful QEMU boot proves nothing about those.
 
-Shut down the guest cleanly and confirm its QEMU unit has stopped before rebooting the hardware. Diagnose a missing bootloader or failed pool import from the observed error, and back up the affected boot configuration before a repair. Choose any repair from that diagnosis and the owner's approved scope.
+Shut the guest down cleanly and confirm the unit shows `SubState=exited` before rebooting the hardware.
+
+## Repair
+
+Repair is outside this guide until a repair has been tested and recorded. The usual candidates are the firmware boot order, a boot partition that `proxmox-boot-tool status` reports as missing, or a pool that fails to import. The [Proxmox bootloader documentation](https://pve.proxmox.com/wiki/Host_Bootloader) covers `proxmox-boot-tool` for the second case. Back up the affected boot configuration before any repair, and keep the repair within the scope the owner approved.
 
 ## Why the guide requires BIOS
 
-An earlier installation used UEFI in QEMU while the physical server booted in BIOS. The later [clean BIOS installation test](tested-configuration.md) passed both physical reboots without repair. Legacy BIOS is mandatory throughout this workflow.
+An earlier installation used UEFI in QEMU while the physical server booted in BIOS, and the server did not boot. The details of that attempt were not recorded. The later [clean BIOS installation](tested-configuration.md) passed both physical reboots without repair, so legacy BIOS is mandatory throughout this workflow.

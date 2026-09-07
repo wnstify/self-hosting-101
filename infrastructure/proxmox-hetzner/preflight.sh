@@ -1,5 +1,5 @@
 #!/bin/bash
-# Read-only inventory. Never call Hetzner's zpool wrapper automatically.
+# Read-only inventory. Hetzner's zpool may be an installer wrapper, so it runs only when the ZFS module is loaded.
 set -eu
 hostname
 cat /etc/os-release
@@ -18,6 +18,6 @@ ip -4 route
 ip -6 -br addr
 resolvectl dns || cat /etc/resolv.conf
 dmidecode -t bios
-ls -l /dev/kvm
+ls -l /dev/kvm || echo 'KVM_MISSING: /dev/kvm is absent; the QEMU installer cannot run here'
 for cmd in qemu-system-x86_64 debootstrap smartctl; do command -v "$cmd" || true; done
-if [[ -d /sys/module/zfs ]]; then zpool status -LP; fi
+if [[ -d /sys/module/zfs ]]; then zpool status -LP </dev/null; fi

@@ -9,7 +9,9 @@ fail() { echo "ERROR: $*" >&2; exit 1; }
 [[ ! -d /sys/firmware/efi ]] || fail 'Rescue is booted in UEFI; configure legacy BIOS boot before continuing'
 : "${GUEST_CIDR:?Set the installed IPv4 CIDR}"
 : "${GUEST_GATEWAY:?Set the installed IPv4 gateway}"
+[[ "$GUEST_CIDR" != 192.0.2.* ]] || fail 'GUEST_CIDR still holds the documentation value; use the installed address'
 
+[[ -d /run/lock ]] || fail '/run/lock is missing'
 exec 9>/run/lock/proxmox-auto-install.lock
 flock -n 9 || { echo 'Another QEMU installation or verification is running' >&2; exit 1; }
 . "$(dirname "${BASH_SOURCE[0]}")/check-disks.sh"

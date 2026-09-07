@@ -15,13 +15,13 @@ source = "from-answer"
 cidr = "192.0.2.10/24"
 gateway = "192.0.2.1"
 dns = "185.12.64.1"
-filter.ID_NET_NAME_MAC = "*020000000010"
+filter.ID_NET_NAME_MAC = "*REPLACE_WITH_NIC_MAC_WITHOUT_COLONS"
 
 [network.interface-name-pinning]
 enabled = true
 
 [network.interface-name-pinning.mapping]
-"02:00:00:00:00:10" = "nic0"
+"REPLACE_WITH_NIC_MAC" = "nic0"
 
 [disk-setup]
 filesystem = "zfs"

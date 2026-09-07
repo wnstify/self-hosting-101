@@ -17,6 +17,15 @@ done
 chmod 0700 "$WORK_DIR"
 chmod 0600 "$WORK_DIR/answer.toml"
 ! grep -q 'REPLACE_WITH_' "$WORK_DIR/answer.toml" || fail 'Replace answer placeholders first'
+! grep -q '192\.0\.2\.' "$WORK_DIR/answer.toml" || fail 'Replace the documentation network values in answer.toml first'
+# The answer's MAC filter and nic0 mapping must describe the NIC that QEMU presents.
+[[ -f "$WORK_DIR/install.env" ]] || fail "Missing $WORK_DIR/install.env"
+nic_mac=$(sed -n 's/^NIC_MAC=//p' "$WORK_DIR/install.env" | tr -d '"[:space:]' | tr 'A-F' 'a-f')
+[[ "$nic_mac" =~ ^([[:xdigit:]]{2}:){5}[[:xdigit:]]{2}$ ]] || fail 'install.env needs a valid NIC_MAC'
+grep -Eiq "^filter\.ID_NET_NAME_MAC[[:space:]]*=[[:space:]]*\"\*${nic_mac//:/}\"" "$WORK_DIR/answer.toml" \
+    || fail 'answer.toml filter.ID_NET_NAME_MAC does not match NIC_MAC in install.env'
+grep -Eiq "^\"${nic_mac}\"[[:space:]]*=[[:space:]]*\"nic0\"" "$WORK_DIR/answer.toml" \
+    || fail 'answer.toml interface-name-pinning mapping does not match NIC_MAC in install.env'
 echo "$ISO_SHA256  $WORK_DIR/$ISO_NAME" | sha256sum -c -
 
 mounted=0

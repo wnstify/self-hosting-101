@@ -1,15 +1,13 @@
 # Self-Hosting 101
 
-The companion repository for an ongoing YouTube series about secure self-hosting. Follow the videos, work through the written guides, or use an AI agent to help with a task.
-
-New topics and applications will appear as the series grows. Written guides can receive fixes and updates after a video is published. Check each guide's tested configuration before using it on your server.
+This repository goes with my YouTube series on secure self-hosting. Each video gets a written guide here, with the scripts and checks used on screen. When something breaks or changes after a video is out, I fix the guide, so the text can differ from the recording. Read a guide's tested configuration before you run it on your own server.
 
 ## Start here
 
-- [Getting started](START-HERE.md) explains how to follow the guides.
-- [Episode index](episodes/README.md) connects videos to their guides and teaching materials.
-- [Using an AI agent](USING-AI.md) provides a starting prompt and explains the shared instructions.
-- [Roadmap](ROADMAP.md) tracks possible future topics and work in progress.
+- [Start here](START-HERE.md) is the checklist to read before following any guide.
+- [Episode index](episodes/README.md) connects videos to their guides and materials.
+- [Using an AI agent](USING-AI.md) gives a starting prompt and explains what you approve.
+- [Roadmap](ROADMAP.md) lists what is in progress and what may come next.
 
 ## Browse by topic
 
@@ -24,14 +22,12 @@ New topics and applications will appear as the series grows. Written guides can 
 
 ## First guide
 
-[Install Proxmox VE on Hetzner](infrastructure/proxmox-hetzner/README.md) covers installation through Linux Rescue, a two-NVMe ZFS mirror, base networking, administrative access, and validation. It requires legacy BIOS and erases both approved disks. Read its [tested configuration](infrastructure/proxmox-hetzner/tested-configuration.md) for evidence and limitations.
+[Install Proxmox VE on Hetzner](infrastructure/proxmox-hetzner/README.md) covers legacy BIOS, a two-NVMe ZFS mirror, base networking, updates, and verification. It erases both selected disks. The clean run I recorded was on a Hetzner AX41 on 2026-09-07; the [tested configuration](infrastructure/proxmox-hetzner/tested-configuration.md) lists what passed, what changed since, and what was not tested.
 
-The first video is being recorded. Its link will appear in the episode index when published.
+The first video is still being recorded. Its link will appear in the episode index when it is published.
 
-## Guides and teaching materials
+## How the repository is organized
 
-Each topic keeps its instructions, scripts, tests, and images together. Companion documents, slides, and downloadable exports belong in that topic's `materials/` directory and are linked from its guide. Materials are added when available.
+Each topic directory holds its guide, scripts, tests, and images. Documents, slides, and downloads go in that topic's `materials/` directory, each labeled with the guide revision it follows. There are no materials yet. The Markdown guide is always the maintained version; a PDF or an older video may show an earlier workflow.
 
-Markdown guides contain the maintained instructions. PDFs and slide decks identify the guide revision they accompany. An older video or download may show an earlier workflow.
-
-See [contributing and repository layout](CONTRIBUTING.md) for naming, templates, and the update process. Agents should read [AGENTS.md](AGENTS.md) before working in the repository.
+Contributors and agents: [CONTRIBUTING.md](CONTRIBUTING.md) has the layout, status conventions, and update process, and [AGENTS.md](AGENTS.md) has the working rules.

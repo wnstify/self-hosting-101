@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Test launcher firmware refusals locally without disks, KVM, or root access."""
 import os
 from pathlib import Path
@@ -39,7 +40,7 @@ class FirmwarePolicyTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertNotIn('Legacy BIOS is mandatory', result.stderr)
                 self.assertTrue(any(message in result.stderr for message in (
-                    'Run as root', 'Set ERASE_CONFIRMED=YES',
+                    'Run as root', 'Set ERASE_CONFIRMED',
                     'Set the installed IPv4 CIDR', 'Rescue is booted in UEFI',
                 )), result.stderr)
 

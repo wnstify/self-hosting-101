@@ -1,12 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
-install -m 0644 /dev/null /etc/sysctl.d/90-disable-ipv6.conf
+# The leading '-' tells sysctl to ignore these keys once ipv6.disable=1 removes them.
 printf '%s\n' \
-    'net.ipv6.conf.all.disable_ipv6 = 1' \
-    'net.ipv6.conf.default.disable_ipv6 = 1' \
-    'net.ipv6.conf.lo.disable_ipv6 = 1' \
+    '-net.ipv6.conf.all.disable_ipv6 = 1' \
+    '-net.ipv6.conf.default.disable_ipv6 = 1' \
+    '-net.ipv6.conf.lo.disable_ipv6 = 1' \
     > /etc/sysctl.d/90-disable-ipv6.conf
+chmod 0644 /etc/sysctl.d/90-disable-ipv6.conf
 
 if [[ -d /proc/sys/net/ipv6 ]]; then
     sysctl -p /etc/sysctl.d/90-disable-ipv6.conf

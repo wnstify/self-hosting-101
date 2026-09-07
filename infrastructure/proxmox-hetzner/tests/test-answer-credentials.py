@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Check public-key validation locally with synthetic public data and mocked hashing."""
 import base64
 from contextlib import redirect_stderr, redirect_stdout
@@ -97,7 +98,7 @@ class AnswerCredentialsTests(unittest.TestCase):
         result = self.run_helper('restrict ' + public_key(0) + '\n')
         self.assert_rejected(result, 'Public-key line 1: use a plain SSH public key without authorized_keys options')
 
-    def test_multiple_valid_keys_keep_the_existing_hashing_workflow(self):
+    def test_multiple_valid_keys_still_hash_the_password(self):
         keys = [public_key(0), public_key(1)]
         result = self.run_helper('# approved keys\n' + keys[0] + ' first comment\n\n' + keys[1] + ' second comment\n')
         self.assertEqual(result['status'], 0, result['output'])

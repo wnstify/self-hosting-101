@@ -3,7 +3,6 @@ answer.toml
 install.env
 *.iso
 *.qcow2
-OVMF_VARS*.fd
 *.log
 *.sock
 *.pem

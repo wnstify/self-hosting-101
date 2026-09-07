@@ -1,6 +1,6 @@
 # Using an AI agent
 
-Use these guides with Claude Code, Codex, Cursor, or another agent that can read your local copy of the repository. Start with the prompt below to tell the agent which instructions to read. This approach needs no tool-specific integration, but it has not been tested with every agent.
+Use these guides with Claude Code, Codex, Cursor, or another agent that can read your local copy of the repository. The prompt below tells the agent which instructions to read. It needs no tool-specific integration, but I have not tested it with every agent.
 
 ## Starting prompt
 
@@ -25,7 +25,7 @@ work, and keep credentials and private logs out of chat and git.
 Report what passed, what failed, and what remains unverified.
 ```
 
-For the current guide, use `infrastructure/proxmox-hetzner` as `GUIDE_PATH`. A first task could be: "Check whether my server fits this installation guide. Do not install anything."
+For the current guide, use `infrastructure/proxmox-hetzner` as `GUIDE_PATH`. A good first task is: "Check whether my server fits this installation guide. Do not install anything."
 
 ## Shared instructions
 
@@ -34,19 +34,21 @@ For the current guide, use `infrastructure/proxmox-hetzner` as `GUIDE_PATH`. A f
 | [Root AGENTS.md](AGENTS.md) | Repository-wide working rules |
 | A guide's `AGENTS.md`, when present | Rules specific to that workflow |
 | A guide's `README.md` | Procedure for both people and agents |
-| A linked `skills/.../SKILL.md`, when present | Agent workflow that uses the same procedure and helpers |
+| A linked `skills/.../SKILL.md`, when present | Agent checklist over the same procedure and helpers |
 | `tested-configuration.md`, when present | Recorded results and limits of the tested setup |
 
-If your tool does not load one of these files automatically, tell it to read the file. The [Proxmox installation skill](skills/install-proxmox-hetzner/SKILL.md) needs the companion repository files even if you copy it into a tool's skills directory.
+If your tool does not load one of these files on its own, tell it to read the file. The [Proxmox installation skill](skills/install-proxmox-hetzner/SKILL.md) needs the repository's scripts even if you copy it into a tool's skills directory.
 
-## Working on a server
+## What you approve
 
-An inspection request authorizes read-only checks. Before destructive work, approve the target and affected resources required by the selected guide. For Proxmox on Hetzner, installation approval covers the actual server, disk serials, storage layout, and IPv6 policy. Existing approval remains valid while that scope stays the same.
+The full rules are in [AGENTS.md](AGENTS.md). For you as the owner, they come down to this:
 
-Use your SSH agent or another approved local credential method. Do not paste private keys, passwords, populated answer files, or raw installation logs into the conversation. Keep private checkpoints under the git-ignored root `records/` directory.
-
-An agent must inspect the current operation after an interruption before retrying. A timeout is not permission to restart an installer. Require the guide's final checks and a clear credential handoff before accepting an installation as complete.
+- Asking for an inspection lets the agent run read-only checks. It does not let it change anything.
+- Destructive steps need your approval for the exact target. For the Proxmox guide that is the server, both disk serials, the storage layout, and the IPv6 policy. The agent asks once and again only if that scope changes.
+- Keep private keys, passwords, populated answer files, and raw logs out of the chat. Use your SSH agent for authentication. Private evidence goes in a `records/` directory at the repository root; Git ignores it, and you create it when you need it.
+- After a timeout or a dropped SSH session, the agent must inspect the current state before retrying. A timeout is not permission to restart an installer.
+- Do not accept an installation as complete until the guide's final checks passed and the agent has told you how you get the root password.
 
 ## Maintaining a guide
 
-For documentation or repository changes, ask the agent to follow [CONTRIBUTING.md](CONTRIBUTING.md), update affected links and examples, and run the relevant local checks. Editing a guide does not authorize changes to a server.
+For documentation or repository changes, ask the agent to follow [CONTRIBUTING.md](CONTRIBUTING.md), update affected links and examples, and run the local checks. Editing a guide never authorizes changes to a server.

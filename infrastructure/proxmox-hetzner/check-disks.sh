@@ -12,7 +12,7 @@ TARGET_DISK_2=$(readlink -f "$TARGET_DISK_2")
 zfs_status=''
 if [[ -d /sys/module/zfs ]]; then
     command -v zpool >/dev/null || fail 'ZFS is loaded but zpool is unavailable'
-    zfs_status=$(zpool status -LP) || fail 'Cannot inspect imported ZFS pools'
+    zfs_status=$(zpool status -LP </dev/null) || fail 'Cannot inspect imported ZFS pools'
 fi
 check_disk() {
     local disk="$1" expected="$2" actual node name mounts nodes

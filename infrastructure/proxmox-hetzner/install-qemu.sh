@@ -9,7 +9,7 @@ TARGET_DISK_2="${TARGET_DISK_2:-}"
 EXPECTED_SERIAL_1="${EXPECTED_SERIAL_1:-}"
 EXPECTED_SERIAL_2="${EXPECTED_SERIAL_2:-}"
 NIC_MAC="${NIC_MAC:-}"
-ERASE_CONFIRMED="${ERASE_CONFIRMED:-NO}"
+ERASE_CONFIRMED="${ERASE_CONFIRMED:-}"
 CHECK_ONLY="${CHECK_ONLY:-0}"
 FIRMWARE_MODE="${FIRMWARE_MODE:-}"
 
@@ -17,15 +17,19 @@ fail() { echo "ERROR: $*" >&2; exit 1; }
 [[ "$FIRMWARE_MODE" == bios ]] || fail 'Legacy BIOS is mandatory: set FIRMWARE_MODE=bios'
 [[ ! -d /sys/firmware/efi ]] || fail 'Rescue is booted in UEFI; configure legacy BIOS boot before continuing'
 [[ ${EUID} -eq 0 ]] || fail 'Run as root'
-[[ "$ERASE_CONFIRMED" == YES ]] || fail 'Set ERASE_CONFIRMED=YES only after approval for these disk serials'
+# The erase flag names the approved serials so a stale YES cannot approve other disks.
+[[ "$ERASE_CONFIRMED" == "${EXPECTED_SERIAL_1}+${EXPECTED_SERIAL_2}" ]] \
+    || fail 'Set ERASE_CONFIRMED to the two approved serials as SERIAL_1+SERIAL_2, in install.env order'
+[[ -n "$EXPECTED_SERIAL_1" && -n "$EXPECTED_SERIAL_2" ]] || fail 'Both expected serials are required'
 [[ -f "$INSTALL_ISO" ]] || fail "Missing installer ISO: $INSTALL_ISO"
 [[ -c /dev/kvm ]] || fail '/dev/kvm is unavailable'
 [[ "$NIC_MAC" =~ ^([[:xdigit:]]{2}:){5}[[:xdigit:]]{2}$ ]] || fail 'A valid NIC_MAC is required'
-for command in qemu-system-x86_64 lsblk readlink flock; do command -v "$command" >/dev/null || fail "Missing $command"; done
+for tool in qemu-system-x86_64 lsblk readlink flock; do command -v "$tool" >/dev/null || fail "Missing $tool"; done
 [[ -n "$TARGET_DISK_1" && -n "$TARGET_DISK_2" ]] || fail 'Both target disks are required'
 TARGET_DISK_1=$(readlink -f "$TARGET_DISK_1")
 TARGET_DISK_2=$(readlink -f "$TARGET_DISK_2")
 [[ "$TARGET_DISK_1" != "$TARGET_DISK_2" ]] || fail 'Target disks must be different'
+[[ -d /run/lock ]] || fail '/run/lock is missing'
 exec 9>/run/lock/proxmox-auto-install.lock
 flock -n 9 || fail 'Another installation holds the lock'
 

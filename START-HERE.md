@@ -1,29 +1,18 @@
-# Getting started
+# Start here
 
-Start with the [episode index](episodes/README.md) to follow the series, or choose a guide from the [topic list](README.md#browse-by-topic). You can use a written guide without watching its video.
+You can use any written guide without watching its video. Each guide opens with its status, what it builds, and the configuration it was tested on. Check those against your own hardware and network before you run anything.
 
-## Before following a guide
+1. Read the whole procedure first, including verification and recovery. Steps that erase disks say so before the command.
+2. Note where each command runs. Every block is labeled: workstation, Rescue, the temporary QEMU guest, or the physical Proxmox host. A server command run on your workstation can do damage, and the other way round.
+3. Replace every placeholder. Addresses such as `192.0.2.10` and names such as `example.com` are documentation values. Use your own server details and your own public SSH key.
+4. Finish the verification steps before you move on. Keep addresses, disk serials, logs, and credentials out of anything you publish.
 
-1. Read its outcome, prerequisites, and tested configuration. Confirm that its hardware, software, and network assumptions fit your setup.
-2. Read the full procedure, including verification and recovery, before making changes.
-3. Use your own server details and public SSH key. Example addresses and configuration files are placeholders.
-4. Check where each command runs. A workstation command and a command for a remote server can have very different effects.
-5. Complete the verification steps before moving to another guide. Keep deployment details and logs private.
+For the first guide you need a Hetzner dedicated server that fits the [tested configuration](infrastructure/proxmox-hetzner/tested-configuration.md), access to Hetzner Robot, and an SSH key.
 
-For the first guide, you need a Hetzner dedicated server that matches the documented installation scope, access to its provider panel, and an SSH key. Installing Proxmox erases the two selected disks. The guide includes the disk checks and approval step.
+## Guides and videos change separately
 
-## Available now
+A guide can be available while its video is still being recorded. When a guide changes after a recording, the [episode index](episodes/README.md) keeps the commit or tag used on screen, and the guide gets a dated correction note if commands or safety advice changed. Check the current guide before reusing commands from a video or a PDF.
 
-[Proxmox on Hetzner](infrastructure/proxmox-hetzner/README.md) is the first guide. Its [test record](infrastructure/proxmox-hetzner/tested-configuration.md) describes the configuration that was tested and the checks that passed.
+## Working with an AI agent
 
-Later guides will list their own prerequisites and link to earlier topics when needed. Planned topics in the [roadmap](ROADMAP.md) have no installation instructions yet.
-
-## Choose how to work
-
-Follow the commands yourself, or give an agent the [starting prompt](USING-AI.md). Both paths use the same guide and scripts. Keep control of credentials and approve destructive work against the actual target.
-
-## Keep track of updates
-
-Check the current guide before reusing commands from a video or PDF. When following a particular recording, use the repository commit or tag listed with that episode, if available. Review any current correction notice before running older instructions.
-
-Guide status and video status are separate. A guide can be available while its video is still being recorded.
+You can type the commands yourself or hand the guide to an agent with the [starting prompt](USING-AI.md). Both paths use the same scripts and checks. You keep the credentials, and you approve destructive work against the exact target.
