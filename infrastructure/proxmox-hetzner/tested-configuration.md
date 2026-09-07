@@ -34,6 +34,6 @@ Local tests pass on Windows with Python 3.14 and Git Bash. They do not replace P
 
 ## Not tested
 
-Other hardware, other storage layouts, Intel microcode selection, routed `/32` networking, an IPv6-enabled configuration, a host with a Proxmox subscription, boot repair, and booting after a disk failure. UEFI is outside this guide's supported workflow.
+Other providers, other hardware, other storage layouts, Intel microcode selection, routed `/32` networking, an IPv6-enabled configuration, a host with a Proxmox subscription, boot repair, and booting after a disk failure. UEFI is outside this guide's supported workflow.
 
 This summary omits deployment addresses, disk serials, SSH keys, credentials, and raw logs. Each deployment's private evidence stays in the git-ignored `records/` directory at the repository root.

@@ -7,7 +7,7 @@ You can use any written guide without watching its video. Each guide opens with 
 3. Replace every placeholder. Addresses such as `192.0.2.10` and names such as `example.com` are documentation values. Use your own server details and your own public SSH key.
 4. Finish the verification steps before you move on. Keep addresses, disk serials, logs, and credentials out of anything you publish.
 
-For the first guide you need a Hetzner dedicated server that fits the [tested configuration](infrastructure/proxmox-hetzner/tested-configuration.md), access to Hetzner Robot, and an SSH key.
+For the first guide you need a bare-metal server that meets the guide's requirements list, access to the provider's panel, and an SSH key. Virtual servers do not work. Hetzner dedicated servers are the tested and recommended option; see the [tested configuration](infrastructure/proxmox-hetzner/tested-configuration.md).
 
 ## Guides and videos change separately
 

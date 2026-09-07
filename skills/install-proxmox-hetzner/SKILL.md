@@ -1,9 +1,9 @@
 ---
 name: install-proxmox-hetzner
-description: Install and verify Proxmox VE on a Hetzner dedicated server through Linux Rescue using QEMU with mandatory legacy BIOS. Use for an authorized fresh Proxmox installation or a preflight inspection, including a reproducible installation record. Does not deploy guests or reverse proxies.
+description: Install and verify Proxmox VE on a bare-metal server through its provider's rescue system using QEMU with mandatory legacy BIOS. Hetzner dedicated servers are the tested platform. Use for an authorized fresh Proxmox installation or a preflight inspection, including a reproducible installation record. Does not deploy guests or reverse proxies.
 ---
 
-# Install Proxmox through Hetzner Rescue
+# Install Proxmox through a provider rescue system
 
 Work from a checkout of the self-hosting-101 repository. Read the root `AGENTS.md`, then `infrastructure/proxmox-hetzner/AGENTS.md` and `infrastructure/proxmox-hetzner/README.md`. The guide, scripts, and tests live in `infrastructure/proxmox-hetzner/`; use it as the workstation working directory. Private records go in `records/` at the repository root; create it if it is missing. If this skill was copied into a personal skills folder, locate the checkout instead of assuming relative paths resolve. Without the companion scripts, stop and obtain them.
 
@@ -11,7 +11,7 @@ This skill is a checklist over the guide, not a second procedure. When the two d
 
 ## Establish the target
 
-Confirm the target and permission for read-only inspection before connecting. An IP and root SSH access do not authorize disk erasure. Run `preflight.sh`, read SMART data for the intended disks, and record serials, active storage, IPv4/prefix/gateway, MAC, DNS, Rescue boot mode, RAM, and KVM availability.
+Check the target against the guide's server and provider requirements first. A virtual server has no usable KVM and is out of scope; say so instead of adapting the workflow. Confirm the target and permission for read-only inspection before connecting. An IP and root SSH access do not authorize disk erasure. Run `preflight.sh`, read SMART data for the intended disks, and record serials, active storage, IPv4/prefix/gateway, MAC, DNS, Rescue boot mode, RAM, and KVM availability.
 
 Collect FQDN, contact email, country, timezone, storage layout, IPv6 policy, and the SSH public key to install. Use choices already made in the conversation. Bind erase authorization to the server and both serials; request it once if absent. Never infer authorization from a record of a different deployment.
 

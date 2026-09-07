@@ -4,7 +4,7 @@ Videos link to maintained topic guides. Episode numbers give the viewing order a
 
 | Episode | Topic | Video | Guide | Materials | Recording revision |
 |---|---|---|---|---|---|
-| 1 | Proxmox on Hetzner | Recording | [Installation guide](../infrastructure/proxmox-hetzner/README.md) | [None yet](../infrastructure/proxmox-hetzner/materials/README.md) | Added at publication |
+| 1 | Proxmox on bare metal | Recording | [Installation guide](../infrastructure/proxmox-hetzner/README.md) | [None yet](../infrastructure/proxmox-hetzner/materials/README.md) | Added at publication |
 
 When publishing an episode, add its YouTube link and the Git commit or tag used in the recording. Link documents or slides through the guide's materials index.
 

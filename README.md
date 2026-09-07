@@ -13,7 +13,7 @@ This repository goes with my YouTube series on secure self-hosting. Each video g
 
 | Topic | Covers | Available guides |
 |---|---|---|
-| [Infrastructure](infrastructure/README.md) | Servers, virtualization, storage, container hosts | [Proxmox on Hetzner](infrastructure/proxmox-hetzner/README.md) |
+| [Infrastructure](infrastructure/README.md) | Servers, virtualization, storage, container hosts | [Proxmox on bare metal](infrastructure/proxmox-hetzner/README.md) |
 | [Networking](networking/README.md) | DNS, routing, private networks, reverse proxies, TLS | Planned |
 | [Security](security/README.md) | SSH, firewalls, access control, MFA, secrets | Planned |
 | [Applications](applications/README.md) | Installation and maintenance of individual apps | Planned |
@@ -22,7 +22,7 @@ This repository goes with my YouTube series on secure self-hosting. Each video g
 
 ## First guide
 
-[Install Proxmox VE on Hetzner](infrastructure/proxmox-hetzner/README.md) covers legacy BIOS, a two-NVMe ZFS mirror, base networking, updates, and verification. It erases both selected disks. The clean run I recorded was on a Hetzner AX41 on 2026-09-07; the [tested configuration](infrastructure/proxmox-hetzner/tested-configuration.md) lists what passed, what changed since, and what was not tested.
+[Install Proxmox VE on a bare-metal server](infrastructure/proxmox-hetzner/README.md) covers legacy BIOS, a two-NVMe ZFS mirror, base networking, updates, and verification. It works on any bare-metal server whose provider offers a Debian-based rescue system with KVM; Hetzner is recommended because that is where I tested it. It erases both selected disks. The clean run I recorded was on a Hetzner AX41 on 2026-09-07; the [tested configuration](infrastructure/proxmox-hetzner/tested-configuration.md) lists what passed, what changed since, and what was not tested.
 
 The first video is still being recorded. Its link will appear in the episode index when it is published.
 

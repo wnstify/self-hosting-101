@@ -5,7 +5,7 @@ Read [README.md](README.md) for navigation and [CONTRIBUTING.md](CONTRIBUTING.md
 ## Choose the workflow
 
 - Before operating on a server, read the topic's README, any AGENTS.md files along its path, and its linked skill if present.
-- For Proxmox on Hetzner, that is [the topic rules](infrastructure/proxmox-hetzner/AGENTS.md), [the installation guide](infrastructure/proxmox-hetzner/README.md), and [the installation skill](skills/install-proxmox-hetzner/SKILL.md). Its helpers and tests live in `infrastructure/proxmox-hetzner/`.
+- For the Proxmox guide, that is [the topic rules](infrastructure/proxmox-hetzner/AGENTS.md), [the installation guide](infrastructure/proxmox-hetzner/README.md), and [the installation skill](skills/install-proxmox-hetzner/SKILL.md). Its helpers and tests live in `infrastructure/proxmox-hetzner/`.
 - Use the shared scripts and verification steps. Do not write a separate installation procedure for agents.
 - Do not use planned topics or unfilled templates as deployment instructions.
 

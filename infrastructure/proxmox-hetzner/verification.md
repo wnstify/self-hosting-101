@@ -231,13 +231,13 @@ tail -20 /root/pve-initial-update.log
 
 Wait for `SubState=exited` with `ExecMainStatus=0` before rebooting. The script expects a fresh Debian 13 and Proxmox 9 installation with its default repository files. Inspect custom or duplicate repository entries separately. It keeps package signature verification and does not remove the subscription notice from the UI. A host with a subscription keeps its enterprise repository and updates through the standard Proxmox procedure instead; that path is not covered here.
 
-Check time synchronization on the physical Proxmox host. If `timedatectl show -p NTPSynchronized` stays `no`, inspect `chronyc -n sources` and `journalctl -u chrony -b`. A source with reach `0` has not returned usable replies. On the physical Proxmox host, test a provider time server without changing the clock:
+Check time synchronization on the physical Proxmox host. If `timedatectl show -p NTPSynchronized` stays `no`, inspect `chronyc -n sources` and `journalctl -u chrony -b`. A source with reach `0` has not returned usable replies. On the physical Proxmox host, test one of your provider's time servers without changing the clock. Hetzner's is shown; replace it with your provider's:
 
 ```bash
 chronyd -Q -t 10 -f /dev/null 'server ntp1.hetzner.de iburst'
 ```
 
-If this succeeds while the default sources stay unreachable, add [Hetzner's documented NTP servers](https://docs.hetzner.com/robot/dedicated-server/security/ntp-servers/) to the existing Chrony configuration. On the physical Proxmox host:
+If this succeeds while the default sources stay unreachable, add your provider's time servers to the existing Chrony configuration. The block uses [Hetzner's documented NTP servers](https://docs.hetzner.com/robot/dedicated-server/security/ntp-servers/). On the physical Proxmox host:
 
 ```bash
 (
@@ -247,13 +247,13 @@ printf '%s\n' \
   'server ntp1.hetzner.de iburst' \
   'server ntp2.hetzner.com iburst' \
   'server ntp3.hetzner.net iburst' \
-  > /etc/chrony/sources.d/hetzner.sources
-chmod 0644 /etc/chrony/sources.d/hetzner.sources
+  > /etc/chrony/sources.d/provider.sources
+chmod 0644 /etc/chrony/sources.d/provider.sources
 systemctl restart chrony
 )
 ```
 
-Allow time for replies, then require `NTPSynchronized=yes` and a selected source marked `^*` in `chronyc -n sources`. If no time server answers, investigate DNS and network filtering. This fallback was needed in the AX41 test.
+Allow time for replies, then require `NTPSynchronized=yes` and a selected source marked `^*` in `chronyc -n sources`. If no time server answers, investigate DNS and network filtering. This fallback was needed in the Hetzner AX41 test.
 
 After the update and time checks pass, reboot the physical Proxmox host:
 

@@ -1,6 +1,6 @@
-# Install Proxmox VE on Hetzner
+# Install Proxmox VE on a bare-metal server
 
-Install Proxmox VE on a Hetzner dedicated server from Linux Rescue, using QEMU/KVM to run the official installer against the two physical NVMe disks. People and AI agents follow the same scripts and checks.
+Install Proxmox VE on a bare-metal server from its provider's rescue system, using QEMU/KVM to run the official installer against the two physical disks. Hetzner dedicated servers are the tested and recommended platform; any provider that meets the requirements below should work. People and AI agents follow the same scripts and checks.
 
 [Infrastructure](../README.md) · [Episode index](../../episodes/README.md) · [Teaching materials](materials/README.md)
 
@@ -17,7 +17,17 @@ The scripts changed after that live test. The tested configuration lists which c
 
 You end up with Proxmox VE 9 on a two-NVMe ZFS mirror, a static IPv4 address pinned to the physical NIC, IPv6 disabled, key-only SSH, the web GUI on localhost only, and all updates applied. Guests, a reverse proxy, and Pangolin are separate guides.
 
-The tested hardware is an AMD AX41 with two NVMe drives and a gateway inside the IPv4 subnet. Other hardware, other storage layouts, Intel microcode, and routed `/32` networks need their own validation.
+The tested hardware is a Hetzner AX41, an AMD server with two NVMe drives and a gateway inside the IPv4 subnet. Another provider's server, other storage layouts, Intel microcode, and routed `/32` networks need their own validation. The directory is named after the tested provider; the procedure is not tied to it.
+
+### Server and provider requirements
+
+- Bare metal only. The installer runs the Proxmox ISO inside KVM on the rescue system, so the rescue system needs `/dev/kvm`. A virtual server has no usable KVM, and Proxmox inside a VPS is not what this guide builds.
+- A rescue or live system you can boot from the provider panel with your SSH public key. It must be Debian 12 or 13 based with root over SSH and `apt` access to the internet, because the builder installs QEMU and debootstrap there. The guide calls it Rescue whatever the provider names it.
+- Legacy BIOS boot. Either the server boots in BIOS mode already or the provider lets you set that through a console or support.
+- Two disks of the same size for the ZFS mirror. NVMe is tested. QEMU presents both disks as NVMe whatever the physical bus, so the answer file's device names stay the same.
+- Enough RAM and CPU in Rescue for the guest. The launchers give it 8 GB and 8 threads; lower `-m` and `-smp` in both launchers if the server has less.
+- A static public IPv4 address with a gateway inside its subnet, and a provider panel that shows the address, prefix, gateway, and the NIC's MAC so you can check what Rescue reports.
+- Console access, such as KVM over IP or IPMI, for the case where the physical boot fails.
 
 **Legacy BIOS is mandatory** for Rescue, the temporary QEMU guest, and the physical server. An earlier attempt installed with UEFI firmware in QEMU on a server that boots in BIOS, and that mismatch is why every launcher now refuses anything except `FIRMWARE_MODE=bios`. They also stop if Rescue itself booted in UEFI. Starting QEMU cannot change the physical firmware; if the server is in UEFI mode, arrange a legacy BIOS boot through the provider console or support first.
 
@@ -35,7 +45,7 @@ On a Windows workstation, run multiline Bash blocks in Git Bash, or enter the in
 
 ## 1. Activate Rescue and connect
 
-In Hetzner Robot, activate Linux Rescue for the server and select your SSH public key. Reboot into Rescue. Keep Robot open in case you need another Rescue boot or a KVM console.
+In your provider's panel, activate the rescue system with your SSH public key and reboot into it. On Hetzner, that is Linux Rescue in Robot. Keep the panel open in case you need another Rescue boot or a console.
 
 On your workstation, replace `SERVER_IP` with the actual address:
 
@@ -70,8 +80,8 @@ Record these values before continuing. Preflight prints most of them; the comman
 | Value | Where to get it |
 |---|---|
 | Disk paths and serials | `lsblk -d -o PATH,SIZE,MODEL,SERIAL`, then the matching `/dev/disk/by-id/` link |
-| IPv4 and prefix | `ip -4 -br addr`, checked against Robot |
-| IPv4 gateway | `ip -4 route`, checked against Robot |
+| IPv4 and prefix | `ip -4 -br addr`, checked against the provider panel |
+| IPv4 gateway | `ip -4 route`, checked against the provider panel |
 | Physical MAC | `ip -br link` |
 | DNS resolvers | `resolvectl dns` |
 | Rescue boot mode | `BOOT_MODE` in the preflight output; must be BIOS |
@@ -79,7 +89,7 @@ Record these values before continuing. Preflight prints most of them; the comman
 
 Check mounts, swap, `/proc/mdstat`, and disk holders. A previous Debian installation may have active software RAID even when nothing is mounted. Inspect the affected arrays and stop only those, after approving their destruction. The installer refuses disks with active holders.
 
-Hetzner's `zpool` command may be a wrapper that installs ZFS. Do not run it as an inventory command unless ZFS is already loaded. If `/sys/module/zfs` exists, inspect `zpool status -LP`. Review any affected pool before exporting it, and keep it exported while QEMU uses its disks.
+Some rescue systems, including Hetzner's, ship a `zpool` wrapper that installs ZFS on first use. Do not run `zpool` as an inventory command unless ZFS is already loaded. If `/sys/module/zfs` exists, inspect `zpool status -LP`. Review any affected pool before exporting it, and keep it exported while QEMU uses its disks.
 
 ## 3. Copy the scripts
 
@@ -239,4 +249,4 @@ Local maintenance checks for this guide are listed in [CONTRIBUTING.md](../../CO
 - [Proxmox automated installation](https://pve.proxmox.com/wiki/Automated_Installation)
 - [Proxmox bootloader documentation](https://pve.proxmox.com/wiki/Host_Bootloader)
 - [Proxmox package repository source documentation](https://github.com/proxmox/pve-docs/blob/master/pve-package-repos.adoc)
-- [Hetzner unattended Proxmox tutorial](https://community.hetzner.com/tutorials/install-proxmox-unattended-hetzner/)
+- [Hetzner unattended Proxmox tutorial](https://community.hetzner.com/tutorials/install-proxmox-unattended-hetzner/), the provider-specific starting point for this workflow

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Read-only inventory. Hetzner's zpool may be an installer wrapper, so it runs only when the ZFS module is loaded.
+# Read-only inventory. Some rescue systems wrap zpool in an installer, so it runs only when the ZFS module is loaded.
 set -eu
 hostname
 cat /etc/os-release

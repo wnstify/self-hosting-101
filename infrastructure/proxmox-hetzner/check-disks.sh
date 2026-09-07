@@ -30,7 +30,7 @@ check_disk() {
         if compgen -G "/sys/class/block/$name/holders/*" >/dev/null; then
             fail "$node has active holders (RAID, LVM, or device mapper); inspect and release them first"
         fi
-        # Hetzner's zpool command can be an interactive installer wrapper.
+        # Some rescue systems (Hetzner among them) wrap zpool in an interactive installer.
         if grep -Fq -- "$node " <<< "$zfs_status"; then
             fail "$node belongs to an imported ZFS pool"
         fi

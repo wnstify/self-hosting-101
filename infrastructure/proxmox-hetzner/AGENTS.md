@@ -12,8 +12,9 @@ These rules add to the [root rules](../../AGENTS.md). Read those first, then the
 ## Disks and firmware
 
 - Check by-id paths, live serials, mounts, swap, RAID and device-mapper holders, and imported ZFS pools. Empty mount output alone does not prove a disk is unused.
-- Hetzner's `zpool` can be an interactive installer wrapper. Check `/sys/module/zfs` before calling it.
+- Some rescue systems, including Hetzner's, wrap `zpool` in an installer. Check `/sys/module/zfs` before calling it.
 - Never give a disk to QEMU while a Rescue pool has it imported. Stop on a serial mismatch or an active holder. Review an affected array before stopping it; do not issue blanket RAID, swap, or ZFS teardown commands.
+- The guide's server and provider requirements apply to every target. A virtual server fails the KVM requirement; stop and say so.
 - Legacy BIOS is mandatory. Keep `FIRMWARE_MODE=bios`. Require BIOS from Rescue, the installed QEMU guest, and the physical host. On UEFI, stop and explain the provider-console or support step; do not select OVMF, bypass the guards, or claim a firmware change without evidence. QEMU cannot change the physical firmware.
 
 ## Running the steps
