@@ -57,7 +57,7 @@ ssh root@SERVER_IP
 
 If you use Bitwarden's SSH agent, unlock it and approve access to the intended key. Do not export the private key or send it to the server.
 
-The server host key changes between Debian, Rescue, and Proxmox. Verify a changed fingerprint through a trusted path before replacing a saved entry. After verification, remove only this server's old entry with `ssh-keygen -R SERVER_IP`. Do not disable host-key checking globally.
+Every Rescue activation gives the server a new SSH host key, and the installed Proxmox system has its own, so a mismatch on the first connection after a reboot is expected. Compare the fingerprint SSH shows with the one your provider panel shows for Rescue; Hetzner Robot prints it on the activation page. Once they match, remove only this server's old entry with `ssh-keygen -R SERVER_IP` and connect. A key that changes with no reboot in between is the case to stop on. Do not disable host-key checking globally.
 
 ## 2. Collect the server values
 
