@@ -5,6 +5,7 @@ This repository goes with my YouTube series on secure self-hosting. Each video g
 ## Start here
 
 - [Start here](START-HERE.md) is the checklist to read before following any guide.
+- [About](ABOUT.md) says who makes this series and how it is funded.
 - [Episode index](episodes/README.md) connects videos to their guides and materials.
 - [Using an AI agent](USING-AI.md) gives a starting prompt and explains what you approve.
 - [Roadmap](ROADMAP.md) lists what is in progress and what may come next.
@@ -31,3 +32,7 @@ The Proxmox video is still being recorded. It is episode 2; the prerequisites vi
 Each topic directory holds its guide, scripts, tests, and images. Documents, slides, and downloads go in that topic's `materials/` directory, each labeled with the guide revision it follows. There are no materials yet. The Markdown guide is always the maintained version; a PDF or an older video may show an earlier workflow.
 
 Contributors and agents: [CONTRIBUTING.md](CONTRIBUTING.md) has the layout, status conventions, and update process, and [AGENTS.md](AGENTS.md) has the working rules.
+
+## License and reporting
+
+Scripts are under the [MIT License](LICENSE). Guides, images, and other written material are under [CC BY 4.0](LICENSE-DOCS); credit Webnestify Education when you reuse them. Report a wrong step or a misbehaving script through the [issue templates](https://github.com/wnstify/self-hosting-101/issues/new/choose). Report a security flaw privately as described in [SECURITY.md](SECURITY.md).

@@ -1,5 +1,7 @@
 # Repository instructions
 
+This is the private working repository for the Self-Hosting 101 series. A public repository with only the files viewers need comes later. Write guides and scripts as if they are already public; keep working notes, agent pointers, and anything in `records/` out of that future copy.
+
 Read [README.md](README.md) for navigation and [CONTRIBUTING.md](CONTRIBUTING.md) before adding or reorganizing content. These rules apply everywhere in the repository; a topic's own `AGENTS.md` adds to them.
 
 ## Choose the workflow
