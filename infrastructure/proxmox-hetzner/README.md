@@ -15,7 +15,9 @@ The scripts changed after that live test. The tested configuration lists which c
 
 ## What this guide does
 
-You end up with Proxmox VE 9 on a two-NVMe ZFS mirror, a static IPv4 address pinned to the physical NIC, IPv6 disabled, key-only SSH, the web GUI on localhost only, and all updates applied. Guests, a reverse proxy, and Pangolin are separate guides.
+You end up with Proxmox VE 9 on a two-NVMe ZFS mirror, a static IPv4 address pinned to the physical NIC, IPv6 disabled, key-only SSH, the web GUI on localhost only, the cluster services turned off, and all updates applied. Guests, a reverse proxy, and Pangolin are separate guides.
+
+Everything the guide configures comes from the scripts in this directory. You do not need a third-party post-install script on top; [verification and first boot](verification.md) covers the repository switch, updates, and the single-node cleanup.
 
 The tested hardware is a Hetzner AX41, an AMD server with two NVMe drives and a gateway inside the IPv4 subnet. Another provider's server, other storage layouts, Intel microcode, and routed `/32` networks need their own validation. The directory is named after the tested provider; the procedure is not tied to it.
 
@@ -105,7 +107,7 @@ From this guide's directory on your workstation:
 scp build-installer.sh install-qemu.sh check-disks.sh boot-installed-qemu.sh first-boot-disable-ipv6.sh set-answer-credentials.py qemu-screen.py answer.toml.example install.env.example root@SERVER_IP:/tmp/proxmox-auto/
 ```
 
-The update script for the finished host is copied later, in the verification guide, because files left in Rescue do not survive the reboot.
+The update and single-node scripts for the finished host are copied later, in the verification guide, because files left in Rescue do not survive the reboot.
 
 Back in Rescue:
 

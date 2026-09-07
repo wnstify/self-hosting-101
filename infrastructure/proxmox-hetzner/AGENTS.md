@@ -7,7 +7,9 @@ These rules add to the [root rules](../../AGENTS.md). Read those first, then the
 - Installation approval covers the exact server, both disk serials, the storage layout, and the IPv6 policy. Ask once. Ask again only if one of those changes.
 - The erase flag must name both approved serials. Typing them is not the approval; the owner's confirmation of those serials is.
 - A record of a previous deployment is evidence, not approval for another server. Never copy its disk identities, addresses, credentials, or SSH keys into a new deployment.
-- Scope is Proxmox, base networking, storage, updates, and validation. Guests, reverse proxies, overlay networks, and other services need a separate request.
+- Scope is Proxmox, base networking, storage, updates, single-node cleanup, and validation. Guests, reverse proxies, overlay networks, and other services need a separate request.
+- Use the scripts in this directory. Do not download and run a third-party post-install script, and never pipe a remote script into a root shell. If an owner names one, read it, report which steps this guide already applies, and apply the rest through a reviewed change.
+- `DISABLE_SUBSCRIPTION_NAG=1` edits a packaged file and a `proxmox-widget-toolkit` upgrade reverts it. Set it only on request and say that out loud.
 
 ## Disks and firmware
 

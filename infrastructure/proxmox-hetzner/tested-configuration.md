@@ -22,6 +22,12 @@ The default time sources did not respond during this test. Hetzner's time server
 
 An earlier attempt, before this test, installed with UEFI firmware in QEMU on a server that boots in legacy BIOS. The server did not boot. That attempt was not recorded in detail, and it is the reason the workflow now requires BIOS everywhere.
 
+## Single-node cleanup
+
+`configure-single-node.sh` ran on a physical Proxmox 9.2.11 host on 2026-09-07, on the same AX41 hardware as the test above. Both paths were exercised: a first run that stopped and disabled `pve-ha-lrm`, `pve-ha-crm`, and `corosync` and patched the subscription reminder under `DISABLE_SUBSCRIPTION_NAG=1`, and a rerun that reported every change as already applied and touched nothing. Afterwards the host had no failed units, all four Proxmox services active, and HTTP 200 on the GUI.
+
+Its cluster guard is untested. No cluster was available, so the refusal on an existing `/etc/pve/corosync.conf` or a second `pvecm` node has only been read, not run.
+
 ## Changes since the live test
 
 Everything below was checked locally only. The installation scripts have not been rerun against a server since the test above.
@@ -34,6 +40,6 @@ Local tests pass on Windows with Python 3.14 and Git Bash. They do not replace P
 
 ## Not tested
 
-Other providers, other hardware, other storage layouts, Intel microcode selection, routed `/32` networking, an IPv6-enabled configuration, a host with a Proxmox subscription, boot repair, and booting after a disk failure. UEFI is outside this guide's supported workflow.
+Other providers, other hardware, other storage layouts, Intel microcode selection, routed `/32` networking, an IPv6-enabled configuration, a host with a Proxmox subscription, the single-node script's cluster guard, boot repair, and booting after a disk failure. UEFI is outside this guide's supported workflow.
 
 This summary omits deployment addresses, disk serials, SSH keys, credentials, and raw logs. Each deployment's private evidence stays in the git-ignored `records/` directory at the repository root.

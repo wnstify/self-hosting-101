@@ -211,10 +211,10 @@ Require `PHYSICAL_BOOT=BIOS`. If it reports UEFI, stop and correct the boot sett
 
 Once verified, add the captured key to your normal known-hosts file. `ssh-keygen -R SERVER_IP` removes only the old entry for this address; then append the verified line from `installed-known-hosts` to `~/.ssh/known_hosts`. Plain `ssh root@SERVER_IP` works after that.
 
-From the workstation, copy the update script onto the installed host:
+From the workstation, copy the update and single-node scripts onto the installed host:
 
 ```bash
-scp configure-no-subscription.sh root@SERVER_IP:/root/configure-no-subscription.sh
+scp configure-no-subscription.sh configure-single-node.sh root@SERVER_IP:/root/
 ssh root@SERVER_IP
 ```
 
@@ -230,6 +230,28 @@ tail -20 /root/pve-initial-update.log
 ```
 
 Wait for `SubState=exited` with `ExecMainStatus=0` before rebooting. The script expects a fresh Debian 13 and Proxmox 9 installation with its default repository files. Inspect custom or duplicate repository entries separately. It keeps package signature verification and does not remove the subscription notice from the UI. A host with a subscription keeps its enterprise repository and updates through the standard Proxmox procedure instead; that path is not covered here.
+
+### Turn off the cluster services
+
+A standalone host never uses `pve-ha-lrm`, `pve-ha-crm`, or `corosync`. They run by default and cost memory and CPU for nothing. `configure-single-node.sh` stops and disables all three. It refuses to run when `/etc/pve/corosync.conf` exists or `pvecm` reports more than one node, because stopping corosync in a cluster breaks quorum. Rerunning it is safe; it reports what is already done and changes nothing else.
+
+On the physical Proxmox host:
+
+```bash
+sed -i 's/\r$//' /root/configure-single-node.sh
+chmod 0700 /root/configure-single-node.sh
+/root/configure-single-node.sh
+```
+
+Expect three lines saying each service is stopped and disabled, then `Single-node configuration complete.` Re-enable them with `systemctl enable --now pve-ha-lrm pve-ha-crm corosync` before you join this host to a cluster.
+
+The script also removes the subscription reminder from the GUI, but only when you ask for it:
+
+```bash
+DISABLE_SUBSCRIPTION_NAG=1 /root/configure-single-node.sh
+```
+
+That flag edits `proxmoxlib.js`, a file the `proxmox-widget-toolkit` package owns, and writes a dated backup next to it first. Every upgrade of that package restores the reminder, so run the script again afterwards. Leave the flag off to keep packaged files untouched. The reminder is the only thing it changes; the host still updates from the no-subscription repository either way.
 
 Check time synchronization on the physical Proxmox host. If `timedatectl show -p NTPSynchronized` stays `no`, inspect `chronyc -n sources` and `journalctl -u chrony -b`. A source with reach `0` has not returned usable replies. On the physical Proxmox host, test one of your provider's time servers without changing the clock. Hetzner's is shown; replace it with your provider's:
 
@@ -288,6 +310,7 @@ if test -d /proc/sys/net/ipv6; then
 fi
 echo 'IPv6 disabled in the kernel'
 systemctl is-active pve-cluster pvedaemon pveproxy pvestatd
+systemctl is-enabled pve-ha-lrm pve-ha-crm corosync || true
 systemctl --failed --no-pager
 curl -kfsS -o /dev/null -w '%{http_code}\n' https://127.0.0.1:8006/
 getent ahostsv4 enterprise.proxmox.com
@@ -296,7 +319,7 @@ apt-get -s full-upgrade
 )
 ```
 
-Read the results rather than trusting the last exit code. The boot mode must be BIOS, both disks and storage definitions active, the updated kernel running and present on both boot partitions, and APT without pending upgrades. Investigate failed services or unsynchronized time before calling the installation complete.
+Read the results rather than trusting the last exit code. The boot mode must be BIOS, both disks and storage definitions active, the updated kernel running and present on both boot partitions, and APT without pending upgrades. The three cluster services must report `disabled`. Investigate failed services or unsynchronized time before calling the installation complete.
 
 Open an SSH tunnel from your workstation:
 
