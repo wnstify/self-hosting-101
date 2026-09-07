@@ -2,6 +2,8 @@
 
 Continue here after the installer reports success and `pve-install-qemu.service` is inactive with exit status 0. Legacy BIOS is required at every boot checkpoint. A UEFI result is a failed check: stop and arrange a legacy BIOS boot before continuing. Commands are grouped by the machine on which they run.
 
+Workstation commands assume `infrastructure/proxmox-hetzner` is your current directory, as in the [installation guide](README.md). Keep the local `installed-known-hosts` file there for the commands below. Store private deployment evidence in `records/` at the repository root.
+
 ## 1. Check both boot partitions in Rescue
 
 Confirm the installer unit is inactive with `SubState=dead` and `ExecMainStatus=0`. Load the reviewed `install.env`, then reread the partition tables on the two approved disks. Do not import the ZFS pool or start QEMU while a boot partition is mounted.

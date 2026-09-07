@@ -12,7 +12,7 @@ Run `preflight.sh` again. Device names can change after a reboot, so identify th
 
 Follow the read-only boot-partition checks in [verification](verification.md). Both disks need BIOS GRUB, kernel, and initrd files. If a file is missing, record the failure and investigate before modifying anything.
 
-Recreate the private Rescue work directory and reviewed `install.env`, keeping `FIRMWARE_MODE=bios`. Copy `boot-installed-qemu.sh`, `check-disks.sh`, and `qemu-screen.py` from the checkout. The boot helper requires neither the installer ISO nor an erase flag.
+Recreate the private Rescue work directory and reviewed `install.env`, keeping `FIRMWARE_MODE=bios`. Copy `boot-installed-qemu.sh`, `check-disks.sh`, and `qemu-screen.py` from the checkout's `infrastructure/proxmox-hetzner/` directory. The boot helper requires neither the installer ISO nor an erase flag.
 
 Start the installed guest using the verification guide's systemd unit and connect using its previously recorded SSH host key. Inside the guest, inspect:
 

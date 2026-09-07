@@ -5,7 +5,7 @@ description: Install and verify Proxmox VE on a Hetzner dedicated server through
 
 # Install Proxmox through Hetzner Rescue
 
-Work from a checkout of the self-hosting-101 repository. Read its `AGENTS.md` and `README.md`; the executable workflow lives there. If the skill is copied into a personal skills folder, locate that checkout rather than assuming relative paths still resolve. If only the skill is available, obtain the companion scripts before using this method.
+Work from a checkout of the self-hosting-101 repository. Read the root `AGENTS.md`, then `infrastructure/proxmox-hetzner/AGENTS.md` and `infrastructure/proxmox-hetzner/README.md`. The executable workflow, companion scripts, and tests live in `infrastructure/proxmox-hetzner/`; use that as the workstation working directory for the guide's commands. Keep private records in `records/` at the repository root. If the skill is copied into a personal skills folder, locate that checkout rather than assuming relative paths still resolve. If only the skill is available, obtain the companion scripts before using this method.
 
 ## Establish the target
 
@@ -34,8 +34,8 @@ Capture the guest's host public key through trusted Rescue SSH, then use that ve
 
 After reboot, verify the physical host reports legacy BIOS, the approved hostname/network, both ZFS members online, and working SSH. Run `configure-no-subscription.sh`, reboot again, and check package state, running kernel, both boot partitions, Proxmox services, API response, DNS, time synchronization, IPv6 disablement, and available storage. Inspect failures; do not silently redefine a failed check as success.
 
-If Chrony's default time sources remain unreachable, follow the provider-NTP test and fallback in `docs/verification.md`. Require actual synchronization before handoff and check it again after reboot.
+If Chrony's default time sources remain unreachable, follow the provider-NTP test and fallback in the topic's `verification.md`. Require actual synchronization before handoff and check it again after reboot.
 
-If physical boot fails, follow `docs/boot-recovery.md` through Rescue or a provider console. Do not reinstall or wipe boot partitions automatically. Re-identify disks by serial after every Rescue reboot. A UEFI result is a failed check; explain what needs correcting rather than switching workflows.
+If physical boot fails, follow the topic's `boot-recovery.md` through Rescue or a provider console. Do not reinstall or wipe boot partitions automatically. Re-identify disks by serial after every Rescue reboot. A UEFI result is a failed check; explain what needs correcting rather than switching workflows.
 
 Finish the installation record and tutorial with the tested commands and actual outcomes. Report the SSH target, GUI access method, credential handoff, installed version, storage/boot result, and any remaining limitation. Keep reverse-proxy and guest deployment outside this workflow.
