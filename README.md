@@ -24,7 +24,7 @@ This repository goes with my YouTube series on secure self-hosting. Each video g
 
 [Install Proxmox VE on a bare-metal server](infrastructure/proxmox-hetzner/README.md) covers legacy BIOS, a two-NVMe ZFS mirror, base networking, updates, and verification. It works on any bare-metal server whose provider offers a Debian-based rescue system with KVM; Hetzner is recommended because that is where I tested it. It erases both selected disks. The clean run I recorded was on a Hetzner AX41 on 2026-09-07; the [tested configuration](infrastructure/proxmox-hetzner/tested-configuration.md) lists what passed, what changed since, and what was not tested.
 
-The first video is still being recorded. Its link will appear in the episode index when it is published.
+The Proxmox video is still being recorded. It is episode 2; the prerequisites video comes first. Links appear in the episode index at publication.
 
 ## How the repository is organized
 
