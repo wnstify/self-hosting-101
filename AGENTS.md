@@ -4,6 +4,13 @@ This is the private working repository for the Self-Hosting 101 series. A public
 
 Read [README.md](README.md) for navigation and [CONTRIBUTING.md](CONTRIBUTING.md) before adding or reorganizing content. These rules apply everywhere in the repository; a topic's own `AGENTS.md` adds to them.
 
+## Install the skill
+
+- Skills live in `skills/` at the repository root and are tool-agnostic. Tool folders such as `.claude/` and `.agents/` are git-ignored, so nothing is pre-installed for you.
+- Before the first use of a skill, ask the user whether to install it for this project only or globally for their account. Do not choose for them.
+- Install it where your own harness looks. Claude Code reads `.claude/skills/<name>/SKILL.md` in the project or `~/.claude/skills/` globally. Codex reads `.agents/skills/<name>/SKILL.md` in the project or `~/.agents/skills/` globally. Other tools have their own location; use it.
+- Install a pointer, not a copy. The installed file names the skill, keeps the same description, and tells the agent to read and follow `skills/<name>/SKILL.md` in the checkout. A global pointer says to locate the checkout first. The repository file stays the only place the procedure is written.
+
 ## Choose the workflow
 
 - Before operating on a server, read the topic's README, any AGENTS.md files along its path, and its linked skill if present.

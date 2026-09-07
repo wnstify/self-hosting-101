@@ -25,7 +25,7 @@ category/topic/
 
 Create optional directories only when there is something to put in them. Keep helpers in the layout their commands and tests expect. Move reusable code into a shared location only when more than one guide needs it.
 
-The root `skills/` directory holds agent checklists. Each skill must locate its companion topic directory and use the same scripts as the guide. `.claude/skills/` holds one pointer file per skill so Claude Code discovers it; keep the pointer's name and description in step with the skill and put no procedure in it. The root `records/` directory is git-ignored and holds private deployment evidence.
+The root `skills/` directory holds agent checklists. Each skill must locate its companion topic directory and use the same scripts as the guide. Tool-specific folders such as `.claude/`, `.codex/`, and `.agents/` are local and git-ignored; a user tells their agent to install the skill from `skills/`. The root `records/` directory is git-ignored and holds private deployment evidence.
 
 ## Report a problem
 
