@@ -15,3 +15,9 @@ __pycache__/
 records/
 installed-known-hosts
 *.ppm
+
+# Local agent configuration stays out of the repository. The committed skill
+# pointer is the exception; Claude Code needs it to find the shared skill.
+.claude/*
+!.claude/skills/
+.codex/
