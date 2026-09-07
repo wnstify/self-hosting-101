@@ -1,0 +1,35 @@
+[global]
+keyboard = "en-us"
+country = "sk"
+fqdn = "pve.example.com"
+mailto = "admin@example.com"
+timezone = "Europe/Bratislava"
+root-password-hashed = "REPLACE_WITH_SHA512_CRYPT_HASH"
+root-ssh-keys = [
+    "REPLACE_WITH_SSH_PUBLIC_KEY"
+]
+reboot-mode = "power-off"
+
+[network]
+source = "from-answer"
+cidr = "192.0.2.10/24"
+gateway = "192.0.2.1"
+dns = "185.12.64.1"
+filter.ID_NET_NAME_MAC = "*020000000010"
+
+[network.interface-name-pinning]
+enabled = true
+
+[network.interface-name-pinning.mapping]
+"02:00:00:00:00:10" = "nic0"
+
+[disk-setup]
+filesystem = "zfs"
+zfs.raid = "raid1"
+disk-list = [
+    "nvme0n1",
+    "nvme1n1"
+]
+
+[first-boot]
+source = "from-iso"

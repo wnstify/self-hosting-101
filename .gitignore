@@ -1,0 +1,18 @@
+# Installer payloads contain credentials, including password hashes.
+answer.toml
+install.env
+*.iso
+*.qcow2
+OVMF_VARS*.fd
+*.log
+*.sock
+*.pem
+*.key
+proxmox-initial-password*
+.private/
+__pycache__/
+
+# Deployment-specific evidence and captured host keys stay local.
+records/
+installed-known-hosts
+*.ppm
