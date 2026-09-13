@@ -1,0 +1,9 @@
+probe:
+  path: /api/entry-page
+  status: [200]
+timeout: 600
+allow:
+  - text: io_uring
+    why: MariaDB falls back when the host denies io_uring. Recorded in batch-b.md.
+  - text: skip-name-resolve
+    why: MariaDB ignores hostname grants under skip-name-resolve. Recorded in batch-b.md.

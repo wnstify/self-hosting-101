@@ -1,0 +1,12 @@
+probe:
+  path: /health.ashx
+  status: [200]
+timeout: 600
+values:
+  MONGO_ROOT_PASSWORD: generate
+  MONGO_PASSWORD: generate
+  ADMIN_PASSWORD: generate
+  SESSION_KEY: generate
+allow:
+  - text: Could not find user "root"
+    why: MongoDB logs the missing root account at informational severity until database-init creates it. Recorded in batch-b.md.

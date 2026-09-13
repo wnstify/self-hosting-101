@@ -1,0 +1,60 @@
+services:
+  jellyfin:
+    image: ${JELLYFIN_IMAGE:-jellyfin/jellyfin:10.11.11@sha256:aefb67e6a7ff1debdd154a78a7bbb780fd0c873d8639210a7f6a2016ad2b35db}
+    user: "1000:0"
+    restart: unless-stopped
+    read_only: true
+    environment:
+      TZ: ${TZ}
+      HOME: /config
+    volumes:
+      - ./config:/config
+      - ./cache:/cache
+      - ./tmp:/tmp
+      - ./media:/data/media:ro
+      - ./movies:/data/movies:ro
+      - ./shows:/data/shows:ro
+    ports:
+      - "127.0.0.1:${PORT}:8096"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ipc: private
+    mem_limit: 1g
+    cpus: 2
+    pids_limit: 300
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, --show-error, http://127.0.0.1:8096/health]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+  prepare:
+    image: ${PREPARE_IMAGE:-busybox:1.37.0-musl@sha256:fc6dddc4c44b1bfe37f41cae8e67d1693828e8f42a91862816d7953e2c9d3f23}
+    profiles: [init]
+    restart: "no"
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 32m
+    pids_limit: 32
+    volumes: [.:/project]
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        cd /project
+        mkdir -p config cache tmp media movies shows
+        chown -R 1000:0 config cache tmp
+        chmod 0770 config cache tmp
+        chown 0:0 media movies shows
+        chmod 0750 media movies shows
+        echo "Data directories are ready."
+networks:
+  default: {}

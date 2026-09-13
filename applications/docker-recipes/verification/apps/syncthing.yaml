@@ -1,0 +1,8 @@
+probe:
+  path: /rest/noauth/health
+  status: [200]
+timeout: 300
+allow:
+  - text: Syncthing is being stopped
+    why: Normal peer shutdown record. Recorded in functional-checks.md.
+public_ports: [syncthing]

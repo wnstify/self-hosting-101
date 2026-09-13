@@ -1,0 +1,238 @@
+services:
+  wg-easy:
+    image: ${WG_EASY_IMAGE:-ghcr.io/wg-easy/wg-easy:15.3.0@sha256:93bbd593e07bab98d02807a28770ac87ab6c48818e319e68c1f66561feb99876}
+    restart: unless-stopped
+    depends_on:
+      adguard-init:
+        condition: service_completed_successfully
+    environment:
+      INIT_ENABLED: 'true'
+      INIT_USERNAME: admin
+      INIT_PASSWORD: ${WG_EASY_PASSWORD}
+      INIT_HOST: ${WG_HOST}
+      INIT_PORT: ${WG_PORT}
+      INIT_DNS: ${ADGUARD_ADDRESS}
+      INIT_IPV4_CIDR: ${WG_SUBNET}
+      INIT_IPV6_CIDR: ${WG_IPV6_SUBNET}
+      INIT_ALLOWED_IPS: 0.0.0.0/0
+      PORT: '51821'
+      HOST: 0.0.0.0
+      INSECURE: 'true'
+      DISABLE_IPV6: 'true'
+      TZ: ${TZ:-UTC}
+    volumes:
+    - ./wireguard:/etc/wireguard
+    ports:
+    - ${WG_PORT}:${WG_PORT}/udp
+    - 127.0.0.1:${PORT}:51821
+    networks:
+      vpn:
+        ipv4_address: ${WG_ADDRESS}
+    cap_drop:
+    - ALL
+    cap_add:
+    - NET_ADMIN
+    - NET_RAW
+    security_opt:
+    - no-new-privileges:true
+    sysctls:
+      net.ipv4.ip_forward: '1'
+      net.ipv4.conf.all.src_valid_mark: '1'
+    mem_limit: 384m
+    pids_limit: 200
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - wg show wg0 >/dev/null && wget -q -T 5 -O /dev/null http://127.0.0.1:51821/
+      interval: 10s
+      timeout: 6s
+      retries: 12
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  adguard:
+    image: ${ADGUARD_IMAGE:-adguard/adguardhome:v0.107.77@sha256:e6f2b8bcda06064ab055b44933a4f0e983c35558b9cdb8d2e7ab1efcee36d890}
+    command:
+    - --config
+    - /opt/adguardhome/conf/AdGuardHome.yaml
+    - --work-dir
+    - /opt/adguardhome/work
+    - --web-addr
+    - 0.0.0.0:3000
+    - --no-check-update
+    restart: unless-stopped
+    volumes:
+    - ./adguard/conf:/opt/adguardhome/conf
+    - ./adguard/work:/opt/adguardhome/work
+    ports:
+    - 127.0.0.1:${ADGUARD_PORT}:3000
+    networks:
+      vpn:
+        ipv4_address: ${ADGUARD_ADDRESS}
+    cap_drop:
+    - ALL
+    cap_add:
+    - NET_BIND_SERVICE
+    security_opt:
+    - no-new-privileges:true
+    mem_limit: 192m
+    pids_limit: 200
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - -q
+      - -T
+      - '5'
+      - -O
+      - /dev/null
+      - http://127.0.0.1:3000/
+      interval: 10s
+      timeout: 6s
+      retries: 12
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    environment:
+      TZ: ${TZ:-UTC}
+  adguard-init:
+    image: ${PYTHON_IMAGE:-python:3.13.7-alpine3.22@sha256:9ba6d8cbebf0fb6546ae71f2a1c14f6ffd2fdab83af7fa5669734ef30ad48844}
+    restart: 'no'
+    user: 0:0
+    read_only: true
+    entrypoint:
+    - python3
+    - /init.py
+    environment:
+      ADGUARD_PASSWORD: ${ADGUARD_PASSWORD}
+      ADGUARD_UPSTREAM_DNS: ${ADGUARD_UPSTREAM_DNS:-https://cloudflare-dns.com/dns-query}
+      TZ: ${TZ:-UTC}
+    volumes:
+    - ./adguard/conf:/data
+    - type: bind
+      source: ./runtime-config/adguard-init/adguard-init
+      target: /init.py
+      read_only: true
+      bind:
+        create_host_path: false
+    networks:
+    - vpn
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    tmpfs:
+    - /tmp:size=32m,mode=1777
+    mem_limit: 64m
+    pids_limit: 32
+    depends_on:
+      adguard:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  # Compose cannot mount an inline config into a read-only service, so prepare writes the files itself.
+  prepare:
+    image: ${PREPARE_IMAGE:-busybox:1.37.0-musl@sha256:fc6dddc4c44b1bfe37f41cae8e67d1693828e8f42a91862816d7953e2c9d3f23}
+    profiles: [init]
+    restart: "no"
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 32m
+    pids_limit: 32
+    volumes: [.:/project]
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        cd /project
+        umask 077
+        mkdir -p wireguard adguard/conf adguard/work runtime-config/adguard-init
+        chown -R 0:0 wireguard adguard
+        chmod 0700 wireguard adguard/conf adguard/work
+        chmod 0711 runtime-config/adguard-init
+        cat >runtime-config/adguard-init/adguard-init.next <<'PYINIT'
+        import base64,json,os,pathlib,socket,struct,sys,time,urllib.error,urllib.request
+
+        base='http://adguard:3000/control/'
+        http=urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        password=os.environ['ADGUARD_PASSWORD']
+        marker=pathlib.Path('/data/adguard-initialized')
+        def request(path,data=None,authenticated=False):
+            body=None if data is None else json.dumps(data).encode()
+            headers={'Content-Type':'application/json'}
+            if authenticated:
+                headers['Authorization']='Basic '+base64.b64encode(('admin:'+password).encode()).decode()
+            req=urllib.request.Request(base+path,body,headers)
+            # Compose restart can start this job before AdGuard opens its HTTP port.
+            for attempt in range(30):
+                try:
+                    return http.open(req,timeout=30)
+                except urllib.error.URLError as error:
+                    if not isinstance(error.reason,ConnectionRefusedError) or attempt==29:
+                        raise
+                    time.sleep(0.5)
+        def verify_dns():
+            transaction=os.urandom(2)
+            question=transaction+b'\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00'+b'\x07example\x03com\x00\x00\x01\x00\x01'
+            for attempt in range(10):
+                try:
+                    with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as client:
+                        client.settimeout(2)
+                        client.connect(('adguard',53))
+                        client.send(question)
+                        response=client.recv(4096)
+                    if len(response)<12 or response[:2]!=transaction:
+                        raise OSError('DNS readiness received an invalid response')
+                    flags,questions,answers=struct.unpack('!HHH',response[2:8])
+                    if not flags & 0x8000 or flags & 0x000f or questions!=1 or answers<1:
+                        raise OSError('DNS readiness lookup did not resolve example.com')
+                    return
+                except OSError:
+                    if attempt==9:
+                        raise
+                    time.sleep(0.5)
+        try:
+            try:
+                response=request('install/get_addresses')
+            except urllib.error.HTTPError as error:
+                if error.code not in (403,404): raise
+            else:
+                response.close()
+                with request('install/configure',{'web':{'ip':'0.0.0.0','port':3000},'dns':{'ip':'0.0.0.0','port':53},'username':'admin','password':password}): pass
+            if not marker.exists():
+                # Docker resolves the encrypted upstream hostname without public UDP DNS.
+                with request('dns_config',{'bootstrap_dns':['127.0.0.11'],'upstream_dns':[os.environ['ADGUARD_UPSTREAM_DNS']]},True): pass
+                with request('filtering/refresh',{'whitelist':False},True): pass
+                marker.touch(mode=0o600)
+            # Check actual DNS service before starting the VPN.
+            verify_dns()
+            try:
+                with request('status'):
+                    sys.exit('AdGuard administrative API permits access without authentication.')
+            except urllib.error.HTTPError as error:
+                if error.code!=401: raise
+        except (OSError,ValueError) as error:
+            sys.exit('AdGuard setup or readiness failed: '+str(error))
+        PYINIT
+        chown 0:0 runtime-config/adguard-init/adguard-init.next
+        chmod 0600 runtime-config/adguard-init/adguard-init.next
+        mv runtime-config/adguard-init/adguard-init.next runtime-config/adguard-init/adguard-init
+        echo "Data directories and configuration files are ready."
+networks:
+  vpn:
+    ipam:
+      config:
+      - subnet: ${DOCKER_SUBNET}
+        gateway: ${DOCKER_GATEWAY}

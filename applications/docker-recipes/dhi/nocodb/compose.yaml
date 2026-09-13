@@ -1,0 +1,395 @@
+services:
+  postgres:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${POSTGRES_IMAGE:-dhi.io/postgres:18.6-alpine3.24@sha256:d23585213fe835f109c6c74e68679c9c96fe6d3debe569b6c0fc89dc7f2977d0}
+    user: ${POSTGRES_UID:-70}:${POSTGRES_GID:-70}
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: ${TZ}
+      PGDATA: /var/lib/postgresql/18/data
+    volumes:
+    - ./postgres:/var/lib/postgresql
+    networks:
+    - database
+    tmpfs:
+    - /tmp:size=64M,mode=1777
+    - /run/postgresql:size=32M,uid=${POSTGRES_UID:-70},gid=${POSTGRES_GID:-70},mode=0755
+    stop_grace_period: 30s
+    mem_limit: 384m
+    pids_limit: 100
+    healthcheck:
+      test:
+      - CMD
+      - pg_isready
+      - -h
+      - 127.0.0.1
+      - -U
+      - postgres
+      - -d
+      - postgres
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+  database-init:
+    restart: 'no'
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${POSTGRES_IMAGE:-dhi.io/postgres:18.6-alpine3.24@sha256:d23585213fe835f109c6c74e68679c9c96fe6d3debe569b6c0fc89dc7f2977d0}
+    user: ${POSTGRES_UID:-70}:${POSTGRES_GID:-70}
+    read_only: true
+    tmpfs:
+    - /var/lib/postgresql:size=8M,mode=0700,uid=${POSTGRES_UID:-70},gid=${POSTGRES_GID:-70}
+    entrypoint:
+    - psql
+    command:
+    - -h
+    - postgres
+    - -U
+    - postgres
+    - -d
+    - postgres
+    - -v
+    - ON_ERROR_STOP=1
+    - -f
+    - /init.sql
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGCONNECT_TIMEOUT: '10'
+      PGOPTIONS: -c statement_timeout=30000
+    networks:
+    - database
+    mem_limit: 64m
+    pids_limit: 32
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+    - type: bind
+      source: ./runtime-config/database-init/init-sql
+      target: /init.sql
+      read_only: true
+      bind:
+        create_host_path: false
+  redis:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${REDIS_IMAGE:-dhi.io/redis:8.6.6-alpine3.24@sha256:cb9af3bcc8ef8bba975242aba5a96d3307977380e1ef687b66aa9ff86477818d}
+    user: ${REDIS_UID:-65532}:${REDIS_GID:-65532}
+    read_only: true
+    command:
+    - redis-server
+    - /etc/redis/redis.conf
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    volumes:
+    - ./redis:/data
+    - type: bind
+      source: ./runtime-config/redis/redis-conf
+      target: /etc/redis/redis.conf
+      read_only: true
+      bind:
+        create_host_path: false
+    networks:
+    - cache
+    mem_limit: 256m
+    pids_limit: 64
+    healthcheck:
+      test:
+      - CMD
+      - redis-cli
+      - -e
+      - ping
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+  nocodb:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${NOCODB_IMAGE:-nocodb/nocodb:2026.08.1@sha256:2aacc3c704d4f74b27e2a39ac838ac9019c0b008bbbfff673b541a3a75ee1579}
+    user: 1000:1000
+    read_only: true
+    tmpfs:
+    - /tmp:size=256M,mode=1777
+    volumes:
+    - ./data:/usr/app/data
+    - type: bind
+      source: ./runtime-config/nocodb/health-cjs
+      target: /checks/health.cjs
+      read_only: true
+      bind:
+        create_host_path: false
+    networks:
+    - frontend
+    - database
+    - cache
+    mem_limit: 1g
+    pids_limit: 200
+    environment:
+      NC_DB: pg://postgres:5432?u=nocodb&p=${NC_DB_PASSWORD}&d=nocodb
+      NC_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      NC_SITE_URL: ${SITE_URL}
+      NC_AUTH_JWT_SECRET: ${NC_AUTH_JWT_SECRET}
+      NC_CONNECTION_ENCRYPT_KEY: ${NC_CONNECTION_ENCRYPT_KEY}
+      NC_DISABLE_TELE: 'true'
+      NC_DISABLE_ERR_REPORTS: 'true'
+      TZ: ${TZ}
+      NODE_OPTIONS: --max-old-space-size=768
+      NC_WORKER_CONTAINER: 'false'
+    ports:
+    - 127.0.0.1:${PORT}:8080
+    depends_on:
+      database-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD
+      - node
+      - /checks/health.cjs
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 120s
+  worker:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${NOCODB_IMAGE:-nocodb/nocodb:2026.08.1@sha256:2aacc3c704d4f74b27e2a39ac838ac9019c0b008bbbfff673b541a3a75ee1579}
+    user: 1000:1000
+    read_only: true
+    tmpfs:
+    - /tmp:size=256M,mode=1777
+    volumes:
+    - ./data:/usr/app/data
+    - type: bind
+      source: ./runtime-config/worker/health-cjs
+      target: /checks/health.cjs
+      read_only: true
+      bind:
+        create_host_path: false
+    networks:
+    - frontend
+    - database
+    - cache
+    mem_limit: 1g
+    pids_limit: 200
+    environment:
+      NC_DB: pg://postgres:5432?u=nocodb&p=${NC_DB_PASSWORD}&d=nocodb
+      NC_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      NC_SITE_URL: ${SITE_URL}
+      NC_AUTH_JWT_SECRET: ${NC_AUTH_JWT_SECRET}
+      NC_CONNECTION_ENCRYPT_KEY: ${NC_CONNECTION_ENCRYPT_KEY}
+      NC_DISABLE_TELE: 'true'
+      NC_DISABLE_ERR_REPORTS: 'true'
+      TZ: ${TZ}
+      NODE_OPTIONS: --max-old-space-size=768
+      NC_WORKER_CONTAINER: 'true'
+    depends_on:
+      nocodb:
+        condition: service_healthy
+      account-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+      - CMD
+      - node
+      - /checks/health.cjs
+      - worker
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 120s
+  account-init:
+    restart: 'no'
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${NOCODB_IMAGE:-nocodb/nocodb:2026.08.1@sha256:2aacc3c704d4f74b27e2a39ac838ac9019c0b008bbbfff673b541a3a75ee1579}
+    user: 1000:1000
+    read_only: true
+    command:
+    - node
+    - /bootstrap.cjs
+    environment:
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      NC_ADMIN_PASSWORD: ${NC_ADMIN_PASSWORD}
+    volumes:
+    - ./state:/state
+    - type: bind
+      source: ./runtime-config/account-init/bootstrap-cjs
+      target: /bootstrap.cjs
+      read_only: true
+      bind:
+        create_host_path: false
+    networks:
+    - frontend
+    mem_limit: 128m
+    pids_limit: 32
+    depends_on:
+      nocodb:
+        condition: service_healthy
+  prepare:
+    image: ${PREPARE_IMAGE:-dhi.io/busybox:1.37.0-alpine3.24@sha256:cf19544e3830bfd972cd1ab793be113129c61f214583648d590289eaa938ce5a}
+    profiles: [init]
+    restart: "no"
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 32m
+    pids_limit: 32
+    volumes: [.:/project]
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        cd /project
+        umask 077
+        mkdir -p postgres redis data state
+        chown -R ${POSTGRES_UID:-70}:${POSTGRES_GID:-70} postgres
+        chmod 0700 postgres
+        chown -R ${REDIS_UID:-65532}:${REDIS_GID:-65532} redis
+        chmod 0750 redis
+        chown -R 1000:1000 data state
+        chmod 0750 data
+        chmod 0700 state
+        mkdir -p runtime-config/database-init
+        chmod 0711 runtime-config/database-init
+        cat > runtime-config/database-init/init-sql.next <<'RECIPEFILE'
+        SELECT 'CREATE ROLE nocodb LOGIN PASSWORD ''${NC_DB_PASSWORD}'''
+        WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'nocodb') \gexec
+        SELECT 'CREATE DATABASE nocodb OWNER nocodb'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nocodb') \gexec
+        RECIPEFILE
+        chown ${POSTGRES_UID:-70}:${POSTGRES_GID:-70} runtime-config/database-init/init-sql.next
+        chmod 0400 runtime-config/database-init/init-sql.next
+        mv runtime-config/database-init/init-sql.next runtime-config/database-init/init-sql
+        mkdir -p runtime-config/redis
+        chmod 0711 runtime-config/redis
+        cat > runtime-config/redis/redis-conf.next <<'RECIPEFILE'
+        bind 0.0.0.0
+        protected-mode yes
+        requirepass ${REDIS_PASSWORD}
+        dir /data
+        appendonly yes
+        maxmemory 192mb
+        maxmemory-policy noeviction
+        RECIPEFILE
+        chown ${REDIS_UID:-65532}:${REDIS_GID:-65532} runtime-config/redis/redis-conf.next
+        chmod 0400 runtime-config/redis/redis-conf.next
+        mv runtime-config/redis/redis-conf.next runtime-config/redis/redis-conf
+        mkdir -p runtime-config/account-init
+        chmod 0711 runtime-config/account-init
+        cat > runtime-config/account-init/bootstrap-cjs.next <<'RECIPEFILE'
+        const fs = require('node:fs');
+        const marker = '/state/account-ready';
+        async function request(path, body, token) {
+          const response = await fetch(`http://nocodb:8080$${path}`, {
+            method: body ? 'POST' : 'GET',
+            headers: { 'Content-Type': 'application/json', ...(token ? { 'xc-auth': token } : {}) },
+            body: body ? JSON.stringify(body) : undefined,
+            signal: AbortSignal.timeout(20000),
+          });
+          if (!response.ok) throw new Error(`$${path} returned HTTP $${response.status}`);
+          return response.json();
+        }
+        (async () => {
+          if (fs.existsSync(marker)) return;
+          const info = await request('/api/v2/meta/nocodb/info');
+          const credentials = { email: process.env.ADMIN_EMAIL, password: process.env.NC_ADMIN_PASSWORD };
+          const auth = await request(`/api/v1/db/auth/user/$${info.firstUser ? 'signup' : 'signin'}`, credentials);
+          if (!auth.token) throw new Error('Administrator authentication did not return a token');
+          await request('/api/v1/app-settings', { invite_only_signup: true }, auth.token);
+          const settings = await request('/api/v1/app-settings', undefined, auth.token);
+          if (settings.invite_only_signup !== true) throw new Error('Invite-only signup was not saved');
+          fs.writeFileSync(marker, 'ready\n', { mode: 0o600, flag: 'wx' });
+          console.log('Administrator created; signup requires an invitation.');
+        })().catch(error => { console.error(error.message); process.exit(1); });
+        RECIPEFILE
+        chown 0:0 runtime-config/account-init/bootstrap-cjs.next
+        chmod 0444 runtime-config/account-init/bootstrap-cjs.next
+        mv runtime-config/account-init/bootstrap-cjs.next runtime-config/account-init/bootstrap-cjs
+        cat > runtime-config/health-cjs.tmp <<'RECIPEFILE'
+        const Redis = require('/usr/src/app/node_modules/ioredis');
+        (async () => {
+          const response = await fetch('http://127.0.0.1:8080/api/v1/health', { signal: AbortSignal.timeout(4000) });
+          if (!response.ok || (await response.json()).message !== 'OK') throw new Error('HTTP health check failed');
+          if (process.argv[2] === 'worker') {
+            const redis = new Redis(process.env.NC_REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: 0, connectTimeout: 3000 });
+            try {
+              await redis.connect();
+              const [, count] = await redis.pubsub('NUMSUB', 'default-worker');
+              if (Number(count) < 1) throw new Error('Worker has not registered with Redis');
+            } finally {
+              redis.disconnect();
+            }
+          }
+        })().catch(error => { console.error(error.message); process.exit(1); });
+        RECIPEFILE
+        for service in nocodb worker; do
+          mkdir -p "runtime-config/$$service"
+          chmod 0711 "runtime-config/$$service"
+          cp runtime-config/health-cjs.tmp "runtime-config/$$service/health-cjs.next"
+          chown 0:0 "runtime-config/$$service/health-cjs.next"
+          chmod 0444 "runtime-config/$$service/health-cjs.next"
+          mv "runtime-config/$$service/health-cjs.next" "runtime-config/$$service/health-cjs"
+        done
+        rm -f runtime-config/health-cjs.tmp
+        echo "Data directories and runtime configuration are ready."
+networks:
+  frontend: {}
+  database:
+    internal: true
+  cache:
+    internal: true

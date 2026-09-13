@@ -1,0 +1,10 @@
+probe:
+  path: /
+  status: [200]
+timeout: 900
+ports: [PORT, VOICE_TCP_PORT, VOICE_UDP_START, VOICE_UDP_END]
+derive:
+  - 'pem=$(openssl ecparam -name prime256v1 -genkey -noout); echo "VAPID_PRIVATE_KEY=$(printf ''%s\n'' "$pem" | base64 -w0 | tr -d ''='')"; echo "VAPID_PUBLIC_KEY=$(printf ''%s\n'' "$pem" | openssl ec -pubout -outform DER 2>/dev/null | tail -c 65 | base64 -w0 | tr ''+/'' ''-_'' | tr -d ''='')"'
+allow: []
+public_ports: [livekit]
+port_ranges: [[VOICE_UDP_START, VOICE_UDP_END]]

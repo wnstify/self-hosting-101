@@ -1,0 +1,7 @@
+probe:
+  path: /health
+  status: [200]
+timeout: 600
+allow:
+  - text: embeddings.position_ids
+    why: The embedding model loader reports this unused key on first start. Recorded in batch-c.md.

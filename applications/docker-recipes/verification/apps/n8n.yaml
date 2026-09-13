@@ -1,0 +1,7 @@
+probe:
+  path: /healthz
+  status: [200]
+timeout: 300
+allow:
+  - text: Error tracking disabled because this release is older than 6 weeks
+    why: Telemetry notice from the pinned release. Recorded in batch-a.md.

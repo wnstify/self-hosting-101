@@ -1,0 +1,7 @@
+probe:
+  path: /
+  status: [200]
+timeout: 300
+derive:
+  - 'echo "ADMIN_TOKEN=$(printf ''%s'' "$ADMIN_PASSWORD" | argon2 "$(openssl rand -base64 32)" -id -k 65540 -t 3 -p 4 -e)"'
+allow: []

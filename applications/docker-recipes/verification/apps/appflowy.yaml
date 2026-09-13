@@ -1,0 +1,7 @@
+probe:
+  path: /api/health
+  status: [200]
+timeout: 600
+allow:
+  - text: vm.overcommit_memory
+    why: Redis warns on hosts without memory overcommit. Recorded in batch-a.md.

@@ -1,0 +1,780 @@
+services:
+  postgres:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${PGVECTOR_IMAGE:-dhi.io/pgvector:0.8.6-pg18-debian13@sha256:01351d35b072d091ab4aa284eb8e4af3a50b038e12233dca32a104f4c31b830e}
+    environment:
+      POSTGRES_USER: appflowy
+      POSTGRES_DB: appflowy
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: ${TZ:-UTC}
+      PGDATA: /var/lib/postgresql/18/data
+    volumes:
+    - ./postgres:/var/lib/postgresql
+    networks:
+    - database
+    tmpfs:
+    - /tmp:size=64m
+    - /var/run/postgresql:uid=${POSTGRES_UID:-70},gid=${POSTGRES_GID:-70},mode=3775,size=16m
+    healthcheck:
+      test:
+      - CMD
+      - pg_isready
+      - -U
+      - appflowy
+      - -d
+      - appflowy
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    pids_limit: 150
+    mem_limit: 512m
+    user: ${POSTGRES_UID:-70}:${POSTGRES_GID:-70}
+  minio:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${MINIO_IMAGE:-minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e}
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: appflowy
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BROWSER: 'off'
+      TZ: ${TZ:-UTC}
+    volumes:
+    - ./minio:/data
+    networks:
+    - storage
+    - frontend
+    tmpfs:
+    - /tmp:size=256m
+    healthcheck:
+      test:
+      - CMD
+      - mc
+      - ready
+      - local
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    pids_limit: 150
+    mem_limit: 512m
+    user: 1000:1000
+  auth-schema-init:
+    image: ${PGVECTOR_IMAGE:-dhi.io/pgvector:0.8.6-pg18-debian13@sha256:01351d35b072d091ab4aa284eb8e4af3a50b038e12233dca32a104f4c31b830e}
+    restart: 'no'
+    user: ${POSTGRES_UID:-70}:${POSTGRES_GID:-70}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGCONNECT_TIMEOUT: '10'
+      PGOPTIONS: -c statement_timeout=30000
+    entrypoint: [psql]
+    command:
+    - -h
+    - postgres
+    - -U
+    - appflowy
+    - -d
+    - appflowy
+    - -v
+    - ON_ERROR_STOP=1
+    - -c
+    # GoTrue probes its migration table before creating it on a fresh database.
+    - CREATE SCHEMA IF NOT EXISTS auth; CREATE TABLE IF NOT EXISTS auth.schema_migrations (version varchar(14) NOT NULL PRIMARY KEY);
+    networks: [database]
+    mem_limit: 64m
+    pids_limit: 32
+    depends_on:
+      postgres:
+        condition: service_healthy
+  gotrue:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${GOTRUE_IMAGE:-appflowyinc/gotrue:0.12.0@sha256:306c5d6b40aa595111d6b729c96aa5a260b1a525a3e46b1d8be0462cbc07db80}
+    environment:
+      GOTRUE_DB_DRIVER: postgres
+      DATABASE_URL: postgres://appflowy:${POSTGRES_PASSWORD}@postgres:5432/appflowy?search_path=auth
+      PORT: 9999
+      GOTRUE_JWT_SECRET: ${GOTRUE_JWT_SECRET}
+      GOTRUE_JWT_EXP: '604800'
+      GOTRUE_JWT_ADMIN_GROUP_NAME: supabase_admin
+      GOTRUE_SITE_URL: appflowy-flutter://
+      GOTRUE_URI_ALLOW_LIST: ${BASE_URL}/**
+      API_EXTERNAL_URL: ${BASE_URL}/gotrue
+      GOTRUE_ADMIN_EMAIL: ${GOTRUE_ADMIN_EMAIL}
+      GOTRUE_ADMIN_PASSWORD: ${GOTRUE_ADMIN_PASSWORD}
+      GOTRUE_DISABLE_SIGNUP: 'true'
+      GOTRUE_MAILER_AUTOCONFIRM: 'true'
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /gotrue/verify
+      GOTRUE_MAILER_URLPATHS_INVITE: /gotrue/verify
+      GOTRUE_MAILER_URLPATHS_RECOVERY: /gotrue/verify
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /gotrue/verify
+      TZ: ${TZ:-UTC}
+    networks:
+    - database
+    - frontend
+    depends_on:
+      auth-schema-init:
+        condition: service_completed_successfully
+    tmpfs:
+    - /tmp:size=256m
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - --fail
+      - --silent
+      - http://127.0.0.1:9999/health
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    pids_limit: 150
+    mem_limit: 256m
+    env_file:
+    - path: ./extra.env
+      required: false
+  appflowy_cloud:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${APPFLOWY_CLOUD_IMAGE:-appflowyinc/appflowy_cloud:0.12.0@sha256:d8c82089cc51115dea3f148278acd240a19cca5050d5868862b74a2ab04f00ec}
+    environment:
+      RUST_LOG: warn
+      APPFLOWY_ENVIRONMENT: production
+      APPFLOWY_DATABASE_URL: postgres://appflowy:${POSTGRES_PASSWORD}@postgres:5432/appflowy
+      APPFLOWY_DATABASE_MAX_CONNECTIONS: '20'
+      APPFLOWY_REDIS_URI: redis://default:${REDIS_PASSWORD}@redis:6379
+      APPFLOWY_GOTRUE_BASE_URL: http://gotrue:9999
+      APPFLOWY_GOTRUE_JWT_SECRET: ${GOTRUE_JWT_SECRET}
+      APPFLOWY_S3_USE_MINIO: 'true'
+      APPFLOWY_S3_MINIO_URL: http://minio:9000
+      APPFLOWY_S3_CREATE_BUCKET: 'true'
+      APPFLOWY_S3_ACCESS_KEY: appflowy
+      APPFLOWY_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      APPFLOWY_S3_BUCKET: appflowy
+      APPFLOWY_S3_REGION: us-east-1
+      APPFLOWY_S3_PRESIGNED_URL_ENDPOINT: ${BASE_URL}/minio-api
+      APPFLOWY_ACCESS_CONTROL: 'true'
+      APPFLOWY_WEB_URL: ${BASE_URL}
+      APPFLOWY_BASE_URL: ${BASE_URL}
+      APPFLOWY_INDEXER_ENABLED: 'false'
+      TZ: ${TZ:-UTC}
+    networks:
+    - database
+    - cache
+    - storage
+    - frontend
+    depends_on:
+      gotrue:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    tmpfs:
+    - /tmp:size=256m
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - --fail
+      - --silent
+      - http://127.0.0.1:8000/api/health
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    pids_limit: 300
+    mem_limit: 768m
+    env_file:
+    - path: ./extra.env
+      required: false
+  appflowy_worker:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${APPFLOWY_WORKER_IMAGE:-appflowyinc/appflowy_worker:0.12.0@sha256:eca5db527c5a15b1d0e860f1807d9b9431f5b0149677c29d3fa233fcedd58507}
+    environment:
+      RUST_LOG: warn
+      APPFLOWY_ENVIRONMENT: production
+      APPFLOWY_WORKER_ENVIRONMENT: production
+      APPFLOWY_WORKER_REDIS_URL: redis://default:${REDIS_PASSWORD}@redis:6379
+      APPFLOWY_WORKER_DATABASE_URL: postgres://appflowy:${POSTGRES_PASSWORD}@postgres:5432/appflowy
+      APPFLOWY_WORKER_DATABASE_NAME: appflowy
+      APPFLOWY_WORKER_IMPORT_TICK_INTERVAL: 30
+      APPFLOWY_S3_USE_MINIO: 'true'
+      APPFLOWY_S3_MINIO_URL: http://minio:9000
+      APPFLOWY_S3_ACCESS_KEY: appflowy
+      APPFLOWY_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      APPFLOWY_S3_BUCKET: appflowy
+      APPFLOWY_S3_REGION: us-east-1
+      APPFLOWY_INDEXER_ENABLED: 'false'
+      TZ: ${TZ:-UTC}
+    networks:
+    - database
+    - cache
+    - storage
+    - frontend
+    depends_on:
+      appflowy_cloud:
+        condition: service_healthy
+    tmpfs:
+    - /tmp:size=256m
+    pids_limit: 300
+    mem_limit: 512m
+    healthcheck:
+      test:
+      - CMD
+      - bash
+      - -ec
+      - 'exec 3<>/dev/tcp/127.0.0.1/4001; printf "GET /metrics HTTP/1.0\r\nHost: localhost\r\n\r\n" >&3; IFS= read
+        -r response <&3; [[ $$response == *" 200 "* ]]'
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    env_file:
+    - path: ./extra.env
+      required: false
+  appflowy_web:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${APPFLOWY_WEB_IMAGE:-appflowyinc/appflowy_web:0.10.5@sha256:c519ac5b95624647b34a1bc14d26586f3dc2f8309ce547ad61cbce7d118f43e9}
+    environment:
+      APPFLOWY_BASE_URL: ${BASE_URL}
+      APPFLOWY_GOTRUE_BASE_URL: ${BASE_URL}/gotrue
+      APPFLOWY_WS_BASE_URL: ${APPFLOWY_WEBSOCKET_BASE_URL}
+      TZ: ${TZ:-UTC}
+    networks:
+    - frontend
+    depends_on:
+      appflowy_cloud:
+        condition: service_healthy
+    cap_add:
+    - CHOWN
+    - SETUID
+    - SETGID
+    - NET_BIND_SERVICE
+    tmpfs:
+    - /tmp:size=256m
+    - /var/log/supervisor:size=16m
+    - /var/run:size=16m
+    - /var/cache/nginx:size=64m
+    pids_limit: 150
+    mem_limit: 256m
+    healthcheck:
+      test:
+      - CMD
+      - bun
+      - -e
+      - 'fetch(''http://127.0.0.1:80'').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))'
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    configs:
+    - source: web_nginx_conf
+      target: /etc/nginx/nginx.conf
+      mode: 292
+  admin_frontend:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${ADMIN_FRONTEND_IMAGE:-appflowyinc/admin_frontend:0.12.0@sha256:592bd5400d841a8dc10300bd0a81912ea90480dc42374a28c05dd256fb6c50e9}
+    environment:
+      APPFLOWY_GOTRUE_BASE_URL: http://gotrue:9999
+      APPFLOWY_BASE_URL: http://appflowy_cloud:8000
+      APPFLOWY_ALLOWED_ORIGINS: ${BASE_URL}
+      HOSTNAME: 0.0.0.0
+      TZ: ${TZ:-UTC}
+    networks:
+    - frontend
+    depends_on:
+      appflowy_cloud:
+        condition: service_healthy
+    tmpfs:
+    - /tmp:size=256m
+    pids_limit: 150
+    mem_limit: 256m
+    healthcheck:
+      test:
+      - CMD
+      - node
+      - -e
+      - 'fetch(''http://127.0.0.1:3000/console/login'').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))'
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+  redis:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${REDIS_IMAGE:-dhi.io/redis:8.6.6-alpine3.24@sha256:cb9af3bcc8ef8bba975242aba5a96d3307977380e1ef687b66aa9ff86477818d}
+    command:
+    - redis-server
+    - /etc/redis/redis.conf
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+      TZ: ${TZ:-UTC}
+    volumes:
+    - ./redis:/data
+    networks:
+    - cache
+    tmpfs:
+    - /tmp:size=16m
+    healthcheck:
+      test:
+      - CMD
+      - redis-cli
+      - ping
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    pids_limit: 150
+    mem_limit: 256m
+    user: ${REDIS_UID:-65532}:${REDIS_GID:-65532}
+    configs:
+    - source: redis_conf
+      target: /etc/redis/redis.conf
+      uid: ${REDIS_UID:-65532}
+      gid: ${REDIS_GID:-65532}
+      mode: 256
+  nginx:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${NGINX_IMAGE:-dhi.io/nginx:1.30.4-alpine3.24@sha256:3551ea4702923409fe0f138d86f9994fb5f5a19f2d35dad9cb62c099642119d7}
+    ports:
+    - 127.0.0.1:${PORT}:8080
+    networks:
+    - frontend
+    depends_on:
+      appflowy_cloud:
+        condition: service_healthy
+      appflowy_web:
+        condition: service_healthy
+      gotrue:
+        condition: service_healthy
+      admin_frontend:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      appflowy_worker:
+        condition: service_healthy
+    tmpfs:
+    - /tmp:uid=${NGINX_UID:-65532},gid=${NGINX_GID:-65532},mode=1777,size=64m
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - --quiet
+      - --spider
+      - http://127.0.0.1:8080/api/health
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    pids_limit: 150
+    mem_limit: 128m
+    environment:
+      TZ: ${TZ:-UTC}
+    user: ${NGINX_UID:-65532}:${NGINX_GID:-65532}
+    configs:
+    - source: nginx_conf
+      target: /etc/nginx/nginx.conf
+      mode: 292
+  prepare:
+    image: ${PREPARE_IMAGE:-dhi.io/busybox:1.37.0-alpine3.24@sha256:cf19544e3830bfd972cd1ab793be113129c61f214583648d590289eaa938ce5a}
+    profiles: [init]
+    restart: "no"
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 32m
+    pids_limit: 32
+    volumes: [.:/project]
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        cd /project
+        mkdir -p postgres redis minio
+        chown -R ${POSTGRES_UID:-70}:${POSTGRES_GID:-70} postgres
+        chmod 0700 postgres
+        chown -R ${REDIS_UID:-65532}:${REDIS_GID:-65532} redis
+        chmod 0700 redis
+        chown -R 1000:1000 minio
+        chmod 0700 minio
+        [ -e extra.env ] || : >extra.env
+        chmod 0600 extra.env
+        echo "Data directories and configuration files are ready."
+networks:
+  frontend: {}
+  database:
+    internal: true
+  cache:
+    internal: true
+  storage:
+    internal: true
+configs:
+  web_nginx_conf:
+    content: |
+      worker_processes  1;
+
+      error_log  /dev/stderr warn;
+      pid        /tmp/nginx.pid;
+
+      events {
+          worker_connections  1024;
+      }
+
+      http {
+          include       /etc/nginx/mime.types;
+          default_type  application/octet-stream;
+
+          client_body_temp_path /tmp/client_body;
+          proxy_temp_path       /tmp/proxy;
+          fastcgi_temp_path     /tmp/fastcgi;
+          uwsgi_temp_path       /tmp/uwsgi;
+          scgi_temp_path        /tmp/scgi;
+
+          log_format  main  '$$remote_addr - $$remote_user [$$time_local] "$$request" '
+                            '$$status $$body_bytes_sent "$$http_referer" '
+                            '"$$http_user_agent" "$$http_x_forwarded_for"';
+
+          access_log  /dev/stdout main;
+
+          sendfile        on;
+          keepalive_timeout  65;
+
+          gzip  on;
+          gzip_static on;
+          gzip_http_version 1.0;
+          gzip_comp_level 5;
+          gzip_vary on;
+          gzip_types text/plain text/css application/json application/x-javascript
+                     text/xml application/xml application/xml+rss text/javascript
+                     application/javascript application/wasm;
+
+          server {
+              listen       80;
+              server_name  localhost;
+
+              location /health {
+                  access_log off;
+                  return 200 "healthy\n";
+                  add_header Content-Type text/plain;
+              }
+
+              location / {
+                  proxy_pass http://localhost:3000;
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade $$http_upgrade;
+                  proxy_set_header Connection 'upgrade';
+                  proxy_set_header Host $$host;
+                  proxy_cache_bypass $$http_upgrade;
+                  proxy_connect_timeout 30s;
+                  proxy_send_timeout 30s;
+                  proxy_read_timeout 30s;
+              }
+
+              location /static/ {
+                  root /usr/share/nginx/html;
+                  expires 30d;
+                  access_log off;
+              }
+
+              location /appflowy.svg {
+                  root /usr/share/nginx/html;
+                  expires 30d;
+                  access_log off;
+              }
+
+              location /appflowy.ico {
+                  root /usr/share/nginx/html;
+                  expires 30d;
+                  access_log off;
+              }
+
+              location /og-image.png {
+                  root /usr/share/nginx/html;
+                  expires 30d;
+                  access_log off;
+              }
+
+              location /covers/ {
+                  root /usr/share/nginx/html;
+                  expires 30d;
+                  access_log off;
+              }
+
+              location /af_icons/ {
+                  root /usr/share/nginx/html;
+                  expires 30d;
+                  access_log off;
+                  add_header 'Access-Control-Allow-Origin' '*' always;
+                  add_header 'Access-Control-Allow-Methods' 'GET' always;
+              }
+
+              location /.well-known/apple-app-site-association {
+                  root /usr/share/nginx/html;
+                  default_type application/json;
+                  add_header Cache-Control "public, max-age=3600";
+              }
+
+              location /.well-known/assetlinks.json {
+                  root /usr/share/nginx/html;
+                  default_type application/json;
+                  add_header Cache-Control "public, max-age=3600";
+              }
+
+              error_page  404 /404.html;
+              location = /404.html {
+                  root   /usr/share/nginx/html;
+              }
+
+              error_page  500 502 503 504 /50x.html;
+              location = /50x.html {
+                  root   /usr/share/nginx/html;
+              }
+          }
+      }
+  redis_conf:
+    content: |
+      bind 0.0.0.0
+      protected-mode yes
+      port 6379
+      requirepass ${REDIS_PASSWORD}
+      appendonly yes
+      dir /data
+      maxmemory 192mb
+      maxmemory-policy noeviction
+  nginx_conf:
+    content: |
+      worker_processes 1;
+      pid /tmp/nginx.pid;
+      error_log /dev/stderr warn;
+
+      events {
+          worker_connections 1024;
+      }
+
+      http {
+          include       /etc/nginx/mime.types;
+          default_type  application/octet-stream;
+
+          client_body_temp_path /tmp/client_body;
+          proxy_temp_path       /tmp/proxy;
+          fastcgi_temp_path     /tmp/fastcgi;
+          uwsgi_temp_path       /tmp/uwsgi;
+          scgi_temp_path        /tmp/scgi;
+
+          log_format main '$$remote_addr - $$remote_user [$$time_local] "$$request" '
+                          '$$status $$body_bytes_sent "$$http_referer" '
+                          '"$$http_user_agent"';
+
+          access_log /dev/stdout main;
+
+          sendfile    on;
+          tcp_nopush  on;
+          tcp_nodelay on;
+
+          keepalive_timeout 65;
+          client_max_body_size 256m;
+
+          gzip on;
+          gzip_vary on;
+          gzip_min_length 1024;
+          gzip_types text/plain text/css application/json application/javascript
+                     text/xml application/xml application/xml+rss text/javascript
+                     application/wasm image/svg+xml;
+
+          upstream appflowy_web {
+              server appflowy_web:80;
+          }
+
+          upstream gotrue {
+              server gotrue:9999;
+          }
+
+          upstream appflowy_cloud {
+              server appflowy_cloud:8000;
+          }
+
+          upstream admin_frontend {
+              server admin_frontend:3000;
+          }
+
+          upstream minio_s3 {
+              server minio:9000;
+          }
+
+          map $$http_upgrade $$connection_upgrade {
+              default upgrade;
+              ''      close;
+          }
+
+          map $$http_x_forwarded_proto $$forwarded_proto {
+              default $$http_x_forwarded_proto;
+              '' $$scheme;
+          }
+
+          server {
+              listen 8080;
+              server_name _;
+
+              add_header X-Content-Type-Options "nosniff" always;
+              add_header X-Frame-Options "SAMEORIGIN" always;
+              add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+              location /gotrue/ {
+                  proxy_pass http://gotrue/;
+                  proxy_set_header Host $$http_host;
+                  proxy_set_header X-Real-IP $$remote_addr;
+                  proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $$forwarded_proto;
+              }
+
+              location /ws {
+                  proxy_pass http://appflowy_cloud;
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade $$http_upgrade;
+                  proxy_set_header Connection $$connection_upgrade;
+                  proxy_set_header Host $$http_host;
+                  proxy_set_header X-Real-IP $$remote_addr;
+                  proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $$forwarded_proto;
+                  proxy_read_timeout 86400s;
+                  proxy_send_timeout 86400s;
+              }
+
+              location /api {
+                  proxy_pass http://appflowy_cloud;
+                  proxy_set_header Host $$http_host;
+                  proxy_set_header X-Real-IP $$remote_addr;
+                  proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $$forwarded_proto;
+                  proxy_read_timeout 300s;
+              }
+
+              location /console {
+                  proxy_pass http://admin_frontend;
+                  proxy_set_header Accept-Encoding "";
+                  sub_filter_types text/x-component;
+                  sub_filter_once off;
+                  sub_filter 'http://appflowy_cloud:8000' '$$forwarded_proto://$$http_host';
+                  sub_filter 'http://gotrue:9999' '$$forwarded_proto://$$http_host/gotrue';
+                  proxy_set_header X-Forwarded-Host $$http_host;
+                  proxy_set_header Host $$http_host;
+                  proxy_set_header X-Real-IP $$remote_addr;
+                  proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $$forwarded_proto;
+              }
+
+              location /minio-api/ {
+                  proxy_pass http://minio_s3/;
+                  # AppFlowy signs URLs with the internal MinIO host.
+                  proxy_set_header Host minio:9000;
+                  proxy_set_header X-Real-IP $$remote_addr;
+                  proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $$forwarded_proto;
+                  proxy_buffering off;
+                  client_max_body_size 256m;
+              }
+
+              location / {
+                  proxy_pass http://appflowy_web;
+                  proxy_set_header Host $$http_host;
+                  proxy_set_header X-Real-IP $$remote_addr;
+                  proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $$forwarded_proto;
+              }
+          }
+      }

@@ -1,0 +1,304 @@
+services:
+  postgres:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${POSTGRES_IMAGE:-dhi.io/postgres:18.6-alpine3.24@sha256:d23585213fe835f109c6c74e68679c9c96fe6d3debe569b6c0fc89dc7f2977d0}
+    user: 70:70
+    read_only: true
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      PGDATA: /var/lib/postgresql/18/data
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: ${TZ}
+    volumes:
+    - ./postgres:/var/lib/postgresql
+    networks:
+    - database
+    tmpfs:
+    - /tmp:size=64M,mode=1777
+    - /run/postgresql:size=32M,uid=70,gid=70,mode=0755
+    stop_grace_period: 30s
+    mem_limit: 384m
+    pids_limit: 100
+    healthcheck:
+      test:
+      - CMD
+      - pg_isready
+      - -h
+      - 127.0.0.1
+      - -U
+      - postgres
+      - -d
+      - postgres
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+  database-init:
+    restart: 'no'
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${POSTGRES_IMAGE:-dhi.io/postgres:18.6-alpine3.24@sha256:d23585213fe835f109c6c74e68679c9c96fe6d3debe569b6c0fc89dc7f2977d0}
+    user: 70:70
+    tmpfs:
+    - /var/lib/postgresql:size=16M,uid=70,gid=70,mode=0700
+    read_only: true
+    entrypoint:
+    - psql
+    command:
+    - -h
+    - postgres
+    - -U
+    - postgres
+    - -d
+    - postgres
+    - -v
+    - ON_ERROR_STOP=1
+    - -f
+    - /init.sql
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGCONNECT_TIMEOUT: '10'
+      PGOPTIONS: -c statement_timeout=30000
+    networks:
+    - database
+    mem_limit: 64m
+    pids_limit: 32
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+    - type: bind
+      source: ./runtime-config/database-init/database-init
+      target: /init.sql
+      read_only: true
+      bind:
+        create_host_path: false
+  source-patch:
+    image: ${MIRA_IMAGE:-ghcr.io/miracodeai/mira:0.4.0@sha256:c544fbcb693093a57ad0e4434b045db38606613ead41f14186643e270e94e3bc}
+    restart: 'no'
+    user: 1000:1000
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    environment:
+      PYTHONDONTWRITEBYTECODE: '1'
+    volumes:
+    - ./runtime-patches:/patches
+    mem_limit: 64m
+    pids_limit: 16
+    entrypoint: [python, -c]
+    # The pinned module must match before applying the cancellation callback fix.
+    command:
+    - |
+      import hashlib
+      import os
+      import pathlib
+      import sysconfig
+
+      source = pathlib.Path(sysconfig.get_path('purelib')) / 'mira/github_app/webhooks.py'
+      original = source.read_bytes()
+      expected = '8a815dd3cae5b18a3e792a7dddf2ace079130691ef6f9211e47088f922da9372'
+      if hashlib.sha256(original).hexdigest() != expected:
+          raise SystemExit('Mira module changed; review or remove the cancellation patch before updating the image')
+      before = b'if t.exception() and not t.cancelled()'
+      after = b'if not t.cancelled() and t.exception()'
+      if original.count(before) != 1:
+          raise SystemExit('Mira cancellation callback context did not match')
+      backfill_before = b'logger.warning("Backfill failed: %s", t.exception()) if t.exception() else None'
+      backfill_after = b'logger.warning("Backfill failed: %s", t.exception()) if not t.cancelled() and t.exception() else None'
+      if original.count(backfill_before) != 1:
+          raise SystemExit('Mira backfill callback context did not match')
+      notice = b'# Mira 0.4.0, commit 3e167dd2de2e79aaa3b44c5ffeae78215f626113. Apache-2.0; license: /app/LICENSE.\n# Modified to check cancellation before retrieving the task exception.\n'
+      output = pathlib.Path('/patches/webhooks.py')
+      temporary = output.with_suffix('.py.next')
+      temporary.unlink(missing_ok=True)
+      temporary.write_bytes(notice + original.replace(before, after).replace(backfill_before, backfill_after))
+      temporary.chmod(0o444)
+      os.replace(temporary, output)
+      license_path = pathlib.Path('/patches/LICENSE.next')
+      license_path.unlink(missing_ok=True)
+      license_path.write_bytes(pathlib.Path('/app/LICENSE').read_bytes())
+      license_path.chmod(0o444)
+      os.replace(license_path, '/patches/LICENSE')
+      print('Mira cancellation callbacks patched.')
+  mira:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${MIRA_IMAGE:-ghcr.io/miracodeai/mira:0.4.0@sha256:c544fbcb693093a57ad0e4434b045db38606613ead41f14186643e270e94e3bc}
+    user: 1000:1000
+    read_only: true
+    command:
+    - --config
+    - /config/mira.yaml
+    environment:
+      DATABASE_URL: postgresql://mira:${MIRA_DB_PASSWORD}@postgres:5432/mira
+      MIRA_INDEX_DIR: /data/indexes
+      MIRA_GITHUB_APP_ID: ${MIRA_GITHUB_APP_ID}
+      MIRA_BOT_NAME: ${MIRA_BOT_NAME:-}
+      MIRA_GITHUB_API_URL: ${MIRA_GITHUB_API_URL:-https://api.github.com}
+      MIRA_GITHUB_PRIVATE_KEY: '@/keys/github-app.pem'
+      MIRA_WEBHOOK_SECRET: ${MIRA_WEBHOOK_SECRET}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      PYTHONDONTWRITEBYTECODE: '1'
+      TZ: ${TZ}
+    volumes:
+    - type: bind
+      source: ./runtime-patches/webhooks.py
+      target: /usr/local/lib/python3.12/site-packages/mira/github_app/webhooks.py
+      read_only: true
+      bind:
+        create_host_path: false
+    - ./indexes:/data/indexes
+    - type: bind
+      source: ./runtime-config/mira/github-app-key
+      target: /keys/github-app.pem
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ./runtime-config/mira/mira-config
+      target: /config/mira.yaml
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ./runtime-config/mira/mira-health
+      target: /checks/health.py
+      read_only: true
+      bind:
+        create_host_path: false
+    tmpfs:
+    - /tmp:size=128M,mode=1777
+    ports:
+    - 127.0.0.1:${PORT}:8000
+    networks:
+    - frontend
+    - database
+    mem_limit: 768m
+    pids_limit: 128
+    depends_on:
+      source-patch:
+        condition: service_completed_successfully
+      database-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - /checks/health.py
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 90s
+  prepare:
+    image: ${PREPARE_IMAGE:-dhi.io/busybox:1.37.0-alpine3.24@sha256:cf19544e3830bfd972cd1ab793be113129c61f214583648d590289eaa938ce5a}
+    profiles: [init]
+    restart: "no"
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 32m
+    pids_limit: 32
+    volumes: [.:/project]
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        cd /project
+        mkdir -p runtime-patches
+        chown 1000:1000 runtime-patches
+        chmod 0750 runtime-patches
+        [ -e runtime-patches/webhooks.py ] || : >runtime-patches/webhooks.py
+        chown 1000:1000 runtime-patches/webhooks.py
+        chmod 0444 runtime-patches/webhooks.py
+        umask 077
+        test -n '${MIRA_GITHUB_APP_ID}' || { echo "Set MIRA_GITHUB_APP_ID in .env to the GitHub App ID; Mira exits at startup without it." >&2; exit 1; }
+        test -n '${MIRA_GITHUB_PRIVATE_KEY_BASE64}' || { echo "Set MIRA_GITHUB_PRIVATE_KEY_BASE64 in .env to the base64 of the GitHub App private key; Mira exits at startup without it." >&2; exit 1; }
+        mkdir -p postgres indexes runtime-config/database-init runtime-config/mira
+        chown -R 70:70 postgres
+        chmod 0700 postgres
+        chown -R 1000:1000 indexes
+        chmod 0700 indexes
+        chmod 0711 runtime-config runtime-config/database-init runtime-config/mira
+        cat > runtime-config/database-init/database-init.next <<'SQL'
+        SELECT 'CREATE ROLE mira LOGIN PASSWORD ''${MIRA_DB_PASSWORD}'''
+        WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'mira') \gexec
+        SELECT 'CREATE DATABASE mira OWNER mira'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'mira') \gexec
+        SQL
+        chown 70:70 runtime-config/database-init/database-init.next
+        chmod 0400 runtime-config/database-init/database-init.next
+        mv runtime-config/database-init/database-init.next runtime-config/database-init/database-init
+        printf '%s' '${MIRA_GITHUB_PRIVATE_KEY_BASE64}' | base64 -d > runtime-config/mira/github-app-key.next
+        # Busybox has no openssl, so the PEM header and footer are the only check available.
+        head -n 1 runtime-config/mira/github-app-key.next | grep -q '^-----BEGIN' && tail -n 1 runtime-config/mira/github-app-key.next | grep -q 'PRIVATE KEY-----$' || { rm -f runtime-config/mira/github-app-key.next; echo "MIRA_GITHUB_PRIVATE_KEY_BASE64 must decode to the PEM private key downloaded from the GitHub App." >&2; exit 1; }
+        chown 1000:1000 runtime-config/mira/github-app-key.next
+        chmod 0400 runtime-config/mira/github-app-key.next
+        mv runtime-config/mira/github-app-key.next runtime-config/mira/github-app-key
+        cat > runtime-config/mira/mira-config.next <<'YAML'
+        llm:
+          model: ${MIRA_MODEL}
+          indexing_model: ${MIRA_INDEXING_MODEL}
+          fallback_model: ${MIRA_INDEXING_MODEL}
+        YAML
+        chown 1000:1000 runtime-config/mira/mira-config.next
+        chmod 0400 runtime-config/mira/mira-config.next
+        mv runtime-config/mira/mira-config.next runtime-config/mira/mira-config
+        cat > runtime-config/mira/mira-health.next <<'PY'
+        import json
+        import os
+        import urllib.request
+
+        import psycopg
+
+        with urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=4) as response:
+            if json.load(response) != {"status": "ok"}:
+                raise SystemExit("Mira HTTP health check failed")
+        with psycopg.connect(os.environ["DATABASE_URL"], connect_timeout=4, options="-c statement_timeout=4000") as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT EXISTS (SELECT FROM users WHERE is_admin), current_user")
+                if cursor.fetchone() != (True, "mira"):
+                    raise SystemExit("Mira database or administrator is not ready")
+        PY
+        chown 1000:1000 runtime-config/mira/mira-health.next
+        chmod 0444 runtime-config/mira/mira-health.next
+        mv runtime-config/mira/mira-health.next runtime-config/mira/mira-health
+        echo "Data directories and configuration files are ready."
+networks:
+  frontend: {}
+  database:
+    internal: true

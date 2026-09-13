@@ -1,0 +1,6 @@
+probe:
+  path: /
+  status: [200]
+timeout: 300
+allow: []
+public_ports: [wg-easy]

@@ -1,0 +1,13 @@
+probe:
+  path: /health
+  status: [200]
+timeout: 300
+values:
+  MIRA_GITHUB_APP_ID: "123456"
+  MIRA_BOT_NAME: ""
+  OPENROUTER_API_KEY: "sk-or-v1-placeholder"
+derive:
+  - 'echo "MIRA_GITHUB_PRIVATE_KEY_BASE64=$(openssl genrsa 2048 2>/dev/null | base64 | tr -d ''\n'')"'
+allow:
+  - text: Failed to fetch app slug
+    why: Placeholder GitHub App credentials make the startup slug lookup return HTTP 404. Recorded in batch-a.md.

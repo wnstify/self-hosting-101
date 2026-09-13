@@ -1,0 +1,331 @@
+services:
+  postgres:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${PGVECTOR_IMAGE:-pgvector/pgvector:0.8.6-pg18-trixie@sha256:78bf48b801e792f99e3ac62b5036fd3876e9be48afda16c1e331af1c75ceb2ff}
+    user: ${POSTGRES_UID:-999}:${POSTGRES_GID:-999}
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: ${TZ:-UTC}
+      PGDATA: /var/lib/postgresql/18/data
+    volumes:
+    - ./postgres:/var/lib/postgresql
+    networks:
+    - database
+    tmpfs:
+    - /tmp:size=64M,mode=1777
+    - /run/postgresql:size=32M,uid=${POSTGRES_UID:-999},gid=${POSTGRES_GID:-999},mode=0755
+    stop_grace_period: 30s
+    mem_limit: 1g
+    pids_limit: 100
+    healthcheck:
+      test:
+      - CMD
+      - pg_isready
+      - -h
+      - 127.0.0.1
+      - -U
+      - postgres
+      - -d
+      - postgres
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+  database-init:
+    restart: 'no'
+    tmpfs:
+    - /var/lib/postgresql:size=16M,uid=${POSTGRES_UID:-999},gid=${POSTGRES_GID:-999},mode=0700
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${PGVECTOR_IMAGE:-pgvector/pgvector:0.8.6-pg18-trixie@sha256:78bf48b801e792f99e3ac62b5036fd3876e9be48afda16c1e331af1c75ceb2ff}
+    user: ${POSTGRES_UID:-999}:${POSTGRES_GID:-999}
+    read_only: true
+    entrypoint:
+    - psql
+    command:
+    - -h
+    - postgres
+    - -U
+    - postgres
+    - -d
+    - postgres
+    - -v
+    - ON_ERROR_STOP=1
+    - -f
+    - /init.sql
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGCONNECT_TIMEOUT: '10'
+      PGOPTIONS: -c statement_timeout=30000
+      PGDATA: /var/lib/postgresql/18/data
+      TZ: ${TZ:-UTC}
+    networks:
+    - database
+    mem_limit: 64m
+    pids_limit: 32
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+    - type: bind
+      source: ./runtime-config/database-init/config_init_sql
+      target: /init.sql
+      read_only: true
+      bind:
+        create_host_path: false
+  redis:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${REDIS_IMAGE:-redis:8.6.6-alpine@sha256:75934ddb37bfaebe3b4082ba673cac39f66495244134f33dd0a502ce03cdcd36}
+    user: ${REDIS_UID:-999}:${REDIS_GID:-1000}
+    read_only: true
+    command:
+    - redis-server
+    - /etc/redis/redis.conf
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+      TZ: ${TZ:-UTC}
+    volumes:
+    - ./redis:/data
+    - type: bind
+      source: ./runtime-config/redis/config_redis_conf
+      target: /etc/redis/redis.conf
+      read_only: true
+      bind:
+        create_host_path: false
+    networks:
+    - cache
+    mem_limit: 256m
+    pids_limit: 64
+    healthcheck:
+      test:
+      - CMD
+      - redis-cli
+      - -e
+      - ping
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+  baserow:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${BASEROW_IMAGE:-baserow/baserow:2.3.3@sha256:41adb3493379403946a493f30873f743bb65b19b5f387d630ec75f41e25d5b5b}
+    user: 9999:9999
+    cap_add:
+    - NET_BIND_SERVICE
+    working_dir: /baserow/data
+    environment:
+      # Remove the wheel override when the image bundles Gunicorn 24.1 or newer.
+      PYTHONPATH: /python-overrides/gunicorn-24.1.0-py3-none-any.whl:/baserow/backend/src:/baserow/premium/backend/src:/baserow/enterprise/backend/src
+      BASEROW_PUBLIC_URL: ${BASEROW_PUBLIC_URL}
+      BASEROW_CADDY_ADDRESSES: http://:8080
+      BASEROW_CADDY_USER: baserow_docker_user
+      BASEROW_ENABLE_SECURE_PROXY_SSL_HEADER: 'true'
+      DATABASE_HOST: postgres
+      DATABASE_PORT: '5432'
+      DATABASE_NAME: baserow
+      DATABASE_USER: baserow
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      DISABLE_EMBEDDED_PSQL: 'yes'
+      DISABLE_EMBEDDED_REDIS: 'yes'
+      SECRET_KEY: ${SECRET_KEY}
+      BASEROW_JWT_SIGNING_KEY: ${BASEROW_JWT_SIGNING_KEY}
+      BASEROW_FRONTEND_COOKIE_PREFIX: ${BASEROW_FRONTEND_COOKIE_PREFIX:-baserow_}
+      # Keep a worker available for scheduled tasks during template imports.
+      BASEROW_AMOUNT_OF_WORKERS: '2'
+      BASEROW_AMOUNT_OF_GUNICORN_WORKERS: '1'
+      BASEROW_DISABLE_PLUGIN_INSTALL_ON_STARTUP: 'yes'
+      NODE_OPTIONS: --max-old-space-size=384
+      TMPDIR: /tmp
+      NO_COLOR: '1'
+      TZ: ${TZ:-UTC}
+    volumes:
+    - ./data:/baserow/data
+    - ./python-overrides:/python-overrides:ro
+    tmpfs:
+    - /tmp:size=256M,mode=1777
+    networks:
+    - frontend
+    - database
+    - cache
+    ports:
+    - 127.0.0.1:${PORT}:8080
+    mem_limit: 3g
+    pids_limit: 300
+    stop_grace_period: 45s
+    depends_on:
+      dependencies-init:
+        condition: service_completed_successfully
+      database-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - /baserow/venv/bin/python -c 'import gunicorn; assert gunicorn.__version__ == "24.1.0"; assert gunicorn.__file__.startswith("/python-overrides/gunicorn-24.1.0-py3-none-any.whl/")' && curl -fsS --max-time 5 http://127.0.0.1:8000/api/_health/ >/dev/null && curl -fsS --max-time 5 http://127.0.0.1:3000/_health/
+        >/dev/null && /baserow/backend/docker/docker-entrypoint.sh celery-worker-healthcheck && /baserow/backend/docker/docker-entrypoint.sh
+        celery-exportworker-healthcheck && /baserow/backend/docker/docker-entrypoint.sh celery-beat-healthcheck
+      interval: 30s
+      timeout: 30s
+      retries: 10
+      start_period: 300s
+  dependencies-init:
+    image: ${BASEROW_IMAGE:-baserow/baserow:2.3.3@sha256:41adb3493379403946a493f30873f743bb65b19b5f387d630ec75f41e25d5b5b}
+    restart: 'no'
+    user: 9999:9999
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    mem_limit: 128m
+    pids_limit: 32
+    networks: [frontend]
+    tmpfs:
+    - /tmp:size=16m,mode=1777
+    volumes:
+    - ./python-overrides:/python-overrides
+    - type: bind
+      source: ./runtime-config/dependencies-init.py
+      target: /dependencies-init.py
+      read_only: true
+      bind:
+        create_host_path: false
+    entrypoint: [/baserow/venv/bin/python, /dependencies-init.py]
+  prepare:
+    image: ${PREPARE_IMAGE:-busybox:1.37.0-musl@sha256:fc6dddc4c44b1bfe37f41cae8e67d1693828e8f42a91862816d7953e2c9d3f23}
+    profiles: [init]
+    restart: "no"
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 32m
+    pids_limit: 32
+    volumes: [.:/project]
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        cd /project
+        mkdir -p postgres redis data
+        chown -R ${POSTGRES_UID:-999}:${POSTGRES_GID:-999} postgres
+        chmod 0700 postgres
+        chown -R ${REDIS_UID:-999}:${REDIS_GID:-1000} redis
+        chmod 0750 redis
+        chown -R 9999:9999 data
+        chmod 0750 data
+        umask 077
+        mkdir -p runtime-config/database-init runtime-config/redis
+        chmod 0711 runtime-config runtime-config/database-init runtime-config/redis
+        cat >runtime-config/database-init/config_init_sql.next <<'SQL'
+        SELECT 'CREATE ROLE baserow LOGIN PASSWORD ''${DATABASE_PASSWORD}'''
+        WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'baserow') \gexec
+        SELECT 'CREATE DATABASE baserow OWNER baserow'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'baserow') \gexec
+        \connect baserow
+        CREATE EXTENSION IF NOT EXISTS vector;
+        SQL
+        chown ${POSTGRES_UID:-999}:${POSTGRES_GID:-999} runtime-config/database-init/config_init_sql.next
+        chmod 0400 runtime-config/database-init/config_init_sql.next
+        mv runtime-config/database-init/config_init_sql.next runtime-config/database-init/config_init_sql
+        cat >runtime-config/redis/config_redis_conf.next <<'CONF'
+        bind 0.0.0.0
+        protected-mode yes
+        requirepass ${REDIS_PASSWORD}
+        dir /data
+        appendonly yes
+        maxmemory 192mb
+        maxmemory-policy noeviction
+        CONF
+        chown ${REDIS_UID:-999}:${REDIS_GID:-1000} runtime-config/redis/config_redis_conf.next
+        chmod 0400 runtime-config/redis/config_redis_conf.next
+        mv runtime-config/redis/config_redis_conf.next runtime-config/redis/config_redis_conf
+        mkdir -p python-overrides
+        chown 9999:9999 python-overrides
+        chmod 0755 python-overrides
+        cat >runtime-config/dependencies-init.py.next <<'PYTHON'
+        import hashlib
+        import os
+        from pathlib import Path
+        import sys
+        import urllib.request
+        import zipfile
+
+        wheel = Path('/python-overrides/gunicorn-24.1.0-py3-none-any.whl')
+        expected = 'd7c3e50dfdade301b1a94ed3e9a2c07ab7d154908203813c10d7b175d04bbf23'
+        url = 'https://files.pythonhosted.org/packages/c3/ea/f91518dd05d81eb8fb4c10c86802aa943d65e4df4dbc820ec58e2597b501/gunicorn-24.1.0-py3-none-any.whl'
+        if wheel.exists():
+            data = wheel.read_bytes()
+        else:
+            with urllib.request.urlopen(url, timeout=30) as response:
+                data = response.read(200000)
+        if hashlib.sha256(data).hexdigest() != expected:
+            raise RuntimeError('Gunicorn wheel checksum failed')
+        if not wheel.exists():
+            temporary = wheel.with_suffix('.next')
+            temporary.unlink(missing_ok=True)
+            temporary.write_bytes(data)
+            temporary.chmod(0o444)
+            os.replace(temporary, wheel)
+        with zipfile.ZipFile(wheel) as archive:
+            if 'gunicorn-24.1.0.dist-info/licenses/LICENSE' not in archive.namelist():
+                raise RuntimeError('Gunicorn wheel license is missing')
+        sys.path.insert(0, str(wheel))
+        import gunicorn
+        if gunicorn.__version__ != '24.1.0' or not gunicorn.__file__.startswith(str(wheel) + '/'):
+            raise RuntimeError('Gunicorn override import failed')
+        print('Verified Gunicorn 24.1.0 wheel and license.')
+        PYTHON
+        chmod 0444 runtime-config/dependencies-init.py.next
+        mv runtime-config/dependencies-init.py.next runtime-config/dependencies-init.py
+        echo "Data directories and configuration files are ready."
+networks:
+  frontend: {}
+  database:
+    internal: true
+  cache:
+    internal: true

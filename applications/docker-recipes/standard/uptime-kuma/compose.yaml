@@ -1,0 +1,161 @@
+services:
+  mariadb:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${MARIADB_IMAGE:-mariadb:11.8.9@sha256:2439dcd7d14010ecd1ff7a4e1c5abe8e208c34fe35290744deeeaac3569043c3}
+    read_only: true
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      MARIADB_OPTIONS: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --skip-name-resolve --max-connections=100
+      TZ: ${TZ:-UTC}
+    volumes:
+    - ./database:/var/lib/mysql
+    networks:
+    - database
+    tmpfs:
+    - /tmp:size=64m,mode=1777
+    - ${MARIADB_SOCKET_DIR:-/run/mysqld}:size=16m,uid=${MARIADB_UID:-999},gid=${MARIADB_GID:-999},mode=0750
+    mem_limit: 512m
+    pids_limit: 200
+    healthcheck:
+      test:
+      - CMD
+      - bash
+      - -ec
+      - '[[ "$$(MYSQL_PWD="$$MARIADB_ROOT_PASSWORD" mariadb --protocol=socket --user=root --connect-timeout=3 --silent --skip-column-names
+        --execute="SELECT @@skip_networking")" == 0 ]]'
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    user: ${MARIADB_UID:-999}:${MARIADB_GID:-999}
+    command:
+    - mariadbd
+    - --character-set-server=utf8mb4
+    - --collation-server=utf8mb4_unicode_ci
+    - --skip-name-resolve
+    - --max-connections=100
+  database-init:
+    restart: 'no'
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${MARIADB_IMAGE:-mariadb:11.8.9@sha256:2439dcd7d14010ecd1ff7a4e1c5abe8e208c34fe35290744deeeaac3569043c3}
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    networks:
+    - database
+    read_only: true
+    environment:
+      MYSQL_PWD: ${MARIADB_ROOT_PASSWORD}
+      APP_PASSWORD: ${UPTIME_KUMA_DB_PASSWORD}
+      TZ: ${TZ:-UTC}
+    entrypoint:
+    - bash
+    - -ec
+    command:
+    - |
+      [[ "$$APP_PASSWORD" =~ ^[a-f0-9]{64}$$ ]] || { echo 'Keep the generated app database password as a 64-character hex value.' >&2; exit 1; }
+      timeout 60 mariadb --protocol=tcp --host=mariadb --user=root --connect-timeout=5 <<SQL
+      CREATE DATABASE IF NOT EXISTS uptime_kuma CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      CREATE USER IF NOT EXISTS 'uptime_kuma'@'%' IDENTIFIED BY '$$APP_PASSWORD';
+      GRANT ALL PRIVILEGES ON uptime_kuma.* TO 'uptime_kuma'@'%';
+      SQL
+      MYSQL_PWD="$$APP_PASSWORD" timeout 10 mariadb --protocol=tcp --host=mariadb --user=uptime_kuma --database=uptime_kuma --connect-timeout=5 --silent --execute='SELECT 1' >/dev/null
+      echo 'Application database is ready.'
+    mem_limit: 128m
+    pids_limit: 50
+    user: ${MARIADB_UID:-999}:${MARIADB_GID:-999}
+    tmpfs:
+    - /var/lib/mysql:size=1m,uid=${MARIADB_UID:-999},gid=${MARIADB_GID:-999},mode=0700
+  uptime-kuma:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${UPTIME_KUMA_IMAGE:-louislam/uptime-kuma:2.5.3@sha256:3e24e96c89efff0e3a4b0698cbdd36c15ad3022371db57166e5588853002ee5c}
+    read_only: true
+    depends_on:
+      database-init:
+        condition: service_completed_successfully
+    ports:
+    - 127.0.0.1:${PORT}:3001
+    environment:
+      UPTIME_KUMA_DB_TYPE: mariadb
+      UPTIME_KUMA_DB_HOSTNAME: mariadb
+      UPTIME_KUMA_DB_PORT: '3306'
+      UPTIME_KUMA_DB_NAME: uptime_kuma
+      UPTIME_KUMA_DB_USERNAME: uptime_kuma
+      UPTIME_KUMA_DB_PASSWORD: ${UPTIME_KUMA_DB_PASSWORD}
+      UPTIME_KUMA_LOG_FORMAT: json
+      TZ: ${TZ:-UTC}
+    volumes:
+    - ./data:/app/data
+    networks:
+    - frontend
+    - database
+    cap_add:
+    - NET_RAW
+    tmpfs:
+    - /tmp:size=128m,mode=1777
+    mem_limit: 512m
+    pids_limit: 256
+    healthcheck:
+      test:
+      - CMD
+      - node
+      - -e
+      - const r=require('http').get('http://127.0.0.1:3001/api/entry-page',s=>{let b='';s.on('data',c=>b+=c);s.on('end',()=>{try{process.exit(s.statusCode===200&&['entryPage','statusPageMatchedDomain'].includes(JSON.parse(b).type)?0:1)}catch{process.exit(1)}})});r.setTimeout(3000,()=>r.destroy());r.on('error',()=>process.exit(1));
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 180s
+    user: ${UPTIME_KUMA_UID:-1000}:${UPTIME_KUMA_GID:-1000}
+  prepare:
+    image: ${PREPARE_IMAGE:-busybox:1.37.0-musl@sha256:fc6dddc4c44b1bfe37f41cae8e67d1693828e8f42a91862816d7953e2c9d3f23}
+    profiles: [init]
+    restart: "no"
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 32m
+    pids_limit: 32
+    volumes: [.:/project]
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        cd /project
+        mkdir -p database data
+        chown -R ${MARIADB_UID:-999}:${MARIADB_GID:-999} database
+        chmod 0750 database
+        chown -R ${UPTIME_KUMA_UID:-1000}:${UPTIME_KUMA_GID:-1000} data
+        chmod 0750 data
+        echo "Data directories are ready."
+networks:
+  frontend: {}
+  database:
+    internal: true

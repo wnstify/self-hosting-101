@@ -1,0 +1,4 @@
+probe:
+  path: /health
+  status: [200]
+timeout: 300

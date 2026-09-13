@@ -1,0 +1,7 @@
+probe:
+  path: /api/_health/
+  status: [200]
+timeout: 600
+allow:
+  - text: Error while closing socket
+    why: Gunicorn logs the Uvicorn socket close at INFO on a deliberate stop. Recorded in batch-b.md.

@@ -1,0 +1,1192 @@
+services:
+  database:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    pids_limit: 128
+    mem_limit: 640m
+    tmpfs:
+    - /tmp:size=64m
+    image: ${MONGO_IMAGE:-dhi.io/mongodb:8.3.8-debian13@sha256:5445c5f44cff9dbd5b01366d25f239461d4f17a578a7be3a963029aaf4e00a02}
+    networks:
+    - data
+    command:
+    - --bind_ip_all
+    - --replSet
+    - rs0
+    - --keyFile
+    - /etc/mongo-key
+    - --wiredTigerCacheSizeGB
+    - '0.25'
+    volumes:
+    - ./mongo:/data/db
+    - ./mongo-config:/data/configdb
+    - ./runtime-checks:/checks:ro
+    environment:
+      TZ: ${TZ:-UTC}
+    user: 999:999
+    configs:
+    - source: mongo-key
+      target: /etc/mongo-key
+      uid: '999'
+      gid: '999'
+      mode: 256
+    healthcheck:
+      test: ["CMD", "/checks/ld-musl.so.1", "/checks/busybox", "nc", "-z", "-w", "3", "127.0.0.1", "27017"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 20s
+  redis:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    pids_limit: 128
+    mem_limit: 128m
+    tmpfs:
+    - /tmp:size=64m
+    image: ${REDIS_IMAGE:-dhi.io/redis:8.6.6-alpine3.24@sha256:cb9af3bcc8ef8bba975242aba5a96d3307977380e1ef687b66aa9ff86477818d}
+    networks:
+    - data
+    - voice
+    command:
+    - redis-server
+    - /etc/redis.conf
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+      TZ: ${TZ:-UTC}
+    volumes:
+    - ./redis:/data
+    - type: bind
+      source: ./runtime-config/redis/redis-conf
+      target: /etc/redis.conf
+      read_only: true
+      bind:
+        create_host_path: false
+    read_only: true
+    healthcheck:
+      test:
+      - CMD
+      - redis-cli
+      - -e
+      - ping
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    user: ${REDIS_UID:-65532}:${REDIS_GID:-65532}
+  rabbit:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    pids_limit: 128
+    mem_limit: 512m
+    tmpfs:
+    - /tmp:size=64m
+    image: ${RABBITMQ_IMAGE:-dhi.io/rabbitmq:4.2.6-debian13@sha256:d63959dff2692e93ffe464bd3777b10c079ba385522f5b975cce3e7754572f30}
+    networks:
+    - rabbit
+    user: ${RABBITMQ_UID:-65532}:${RABBITMQ_GID:-65532}
+    hostname: rabbit
+    environment:
+      RABBITMQ_DEFAULT_USER: stoat
+      RABBITMQ_DEFAULT_PASS: ${RABBIT_PASSWORD}
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: +S 2:2 -rabbit vm_memory_high_watermark {absolute,"256MiB"}
+      TZ: ${TZ:-UTC}
+      HOME: /var/lib/rabbitmq
+    volumes:
+    - ./rabbit:/var/lib/rabbitmq
+    healthcheck:
+      test:
+      - CMD
+      - rabbitmq-diagnostics
+      - -q
+      - check_port_connectivity
+      interval: 15s
+      timeout: 15s
+      retries: 12
+      start_period: 60s
+  garage:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    pids_limit: 128
+    mem_limit: 256m
+    tmpfs:
+    - /tmp:size=64m
+    image: ${GARAGE_IMAGE:-dxflrs/garage:v2.3.0@sha256:866bd13ed2038ba7e7190e840482bc27234c4afaf77be8cfa439ae088c1e4690}
+    networks:
+    - data
+    volumes:
+    - ./garage/meta:/var/lib/garage/meta
+    - ./garage/data:/var/lib/garage/data
+    - type: bind
+      source: ./runtime-config/garage/garage-toml
+      target: /etc/garage.toml
+      read_only: true
+      bind:
+        create_host_path: false
+    read_only: true
+    healthcheck:
+      test:
+      - CMD
+      - /garage
+      - status
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    environment:
+      TZ: ${TZ:-UTC}
+  api:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    pids_limit: 128
+    mem_limit: 128m
+    tmpfs:
+    - /tmp:size=64m
+    read_only: true
+    image: ${API_IMAGE:-ghcr.io/stoatchat/api:v0.12.1@sha256:933ecc39f8e7db20289044ce9ab966738733eec90a992149f2212f3470847af0}
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbit:
+        condition: service_healthy
+      mongo-init:
+        condition: service_completed_successfully
+    networks:
+    - app
+    - data
+    - rabbit
+    - frontend
+    environment:
+      TZ: ${TZ:-UTC}
+      REVOLT__DATABASE__MONGODB: mongodb://stoat:${MONGO_PASSWORD}@database:27017/revolt?authSource=revolt&replicaSet=rs0
+      REVOLT__DATABASE__REDIS: redis://:${REDIS_PASSWORD}@redis:6379/
+      REVOLT__RABBIT__HOST: rabbit
+      REVOLT__RABBIT__PORT: '5672'
+      REVOLT__RABBIT__USERNAME: stoat
+      REVOLT__RABBIT__PASSWORD: ${RABBIT_PASSWORD}
+      REVOLT__FILES__S3__ENDPOINT: http://garage:3900
+      REVOLT__FILES__S3__ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      REVOLT__FILES__S3__SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      REVOLT__FILES__S3__DEFAULT_BUCKET: revolt-uploads
+      REVOLT__FILES__S3__REGION: garage
+      REVOLT__FILES__S3__PATH_STYLE_BUCKETS: 'true'
+      REVOLT__FILES__ENCRYPTION_KEY: ${FILES_ENCRYPTION_KEY}
+      REVOLT__PUSHD__VAPID__PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      REVOLT__PUSHD__VAPID__PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+      REVOLT__API__LIVEKIT__NODES__WORLDWIDE__KEY: ${LIVEKIT_KEY}
+      REVOLT__API__LIVEKIT__NODES__WORLDWIDE__SECRET: ${LIVEKIT_SECRET}
+    volumes:
+    - ./runtime-checks:/checks:ro
+    - type: bind
+      source: ./runtime-config/api/revolt
+      target: /Revolt.toml
+      read_only: true
+      bind:
+        create_host_path: false
+    healthcheck:
+      test: ["CMD", "/checks/ld-musl.so.1", "/checks/busybox", "wget", "-q", "-T", "3", "-O", "/dev/null", "http://127.0.0.1:14702/"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 60s
+  events:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    pids_limit: 128
+    mem_limit: 128m
+    tmpfs:
+    - /tmp:size=64m
+    read_only: true
+    image: ${EVENTS_IMAGE:-ghcr.io/stoatchat/events:v0.12.1@sha256:3282cde6951d7cf39414b13940fd243a255b4a1b1026a8f06b8ee15cd0ad27db}
+    depends_on:
+      redis:
+        condition: service_healthy
+      mongo-init:
+        condition: service_completed_successfully
+    networks:
+    - app
+    - data
+    environment:
+      TZ: ${TZ:-UTC}
+      REVOLT__DATABASE__MONGODB: mongodb://stoat:${MONGO_PASSWORD}@database:27017/revolt?authSource=revolt&replicaSet=rs0
+      REVOLT__DATABASE__REDIS: redis://:${REDIS_PASSWORD}@redis:6379/
+      REVOLT__RABBIT__HOST: rabbit
+      REVOLT__RABBIT__PORT: '5672'
+      REVOLT__RABBIT__USERNAME: stoat
+      REVOLT__RABBIT__PASSWORD: ${RABBIT_PASSWORD}
+      REVOLT__FILES__S3__ENDPOINT: http://garage:3900
+      REVOLT__FILES__S3__ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      REVOLT__FILES__S3__SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      REVOLT__FILES__S3__DEFAULT_BUCKET: revolt-uploads
+      REVOLT__FILES__S3__REGION: garage
+      REVOLT__FILES__S3__PATH_STYLE_BUCKETS: 'true'
+      REVOLT__FILES__ENCRYPTION_KEY: ${FILES_ENCRYPTION_KEY}
+      REVOLT__PUSHD__VAPID__PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      REVOLT__PUSHD__VAPID__PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+      REVOLT__API__LIVEKIT__NODES__WORLDWIDE__KEY: ${LIVEKIT_KEY}
+      REVOLT__API__LIVEKIT__NODES__WORLDWIDE__SECRET: ${LIVEKIT_SECRET}
+    volumes:
+    - ./runtime-checks:/checks:ro
+    - type: bind
+      source: ./runtime-config/events/revolt
+      target: /Revolt.toml
+      read_only: true
+      bind:
+        create_host_path: false
+    healthcheck:
+      test: ["CMD", "/checks/ld-musl.so.1", "/checks/busybox", "nc", "-z", "-w", "3", "127.0.0.1", "14703"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 60s
+  autumn:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    pids_limit: 128
+    mem_limit: 128m
+    tmpfs:
+    - /tmp:size=64m
+    read_only: true
+    image: ${AUTUMN_IMAGE:-ghcr.io/stoatchat/file-server:v0.12.1@sha256:2c46472632f0de36238628bcfae71801b5084c525833db153669d48105ec7f33}
+    depends_on:
+      garage-init:
+        condition: service_completed_successfully
+      mongo-init:
+        condition: service_completed_successfully
+    networks:
+    - app
+    - data
+    environment:
+      TZ: ${TZ:-UTC}
+      REVOLT__DATABASE__MONGODB: mongodb://stoat:${MONGO_PASSWORD}@database:27017/revolt?authSource=revolt&replicaSet=rs0
+      REVOLT__DATABASE__REDIS: redis://:${REDIS_PASSWORD}@redis:6379/
+      REVOLT__RABBIT__HOST: rabbit
+      REVOLT__RABBIT__PORT: '5672'
+      REVOLT__RABBIT__USERNAME: stoat
+      REVOLT__RABBIT__PASSWORD: ${RABBIT_PASSWORD}
+      REVOLT__FILES__S3__ENDPOINT: http://garage:3900
+      REVOLT__FILES__S3__ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      REVOLT__FILES__S3__SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      REVOLT__FILES__S3__DEFAULT_BUCKET: revolt-uploads
+      REVOLT__FILES__S3__REGION: garage
+      REVOLT__FILES__S3__PATH_STYLE_BUCKETS: 'true'
+      REVOLT__FILES__ENCRYPTION_KEY: ${FILES_ENCRYPTION_KEY}
+      REVOLT__PUSHD__VAPID__PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      REVOLT__PUSHD__VAPID__PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+      REVOLT__API__LIVEKIT__NODES__WORLDWIDE__KEY: ${LIVEKIT_KEY}
+      REVOLT__API__LIVEKIT__NODES__WORLDWIDE__SECRET: ${LIVEKIT_SECRET}
+    volumes:
+    - ./runtime-checks:/checks:ro
+    - type: bind
+      source: ./runtime-config/autumn/revolt
+      target: /Revolt.toml
+      read_only: true
+      bind:
+        create_host_path: false
+    healthcheck:
+      test: ["CMD", "/checks/ld-musl.so.1", "/checks/busybox", "nc", "-z", "-w", "3", "127.0.0.1", "14704"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 60s
+  january:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    pids_limit: 128
+    mem_limit: 128m
+    tmpfs:
+    - /tmp:size=64m
+    read_only: true
+    image: ${JANUARY_IMAGE:-ghcr.io/stoatchat/proxy:v0.12.1@sha256:ca4f30e9d14e47b5d992d468f616f82e85e927ebd83d5478c7d22a2e8f6eabf1}
+    networks:
+    - app
+    - frontend
+    environment:
+      TZ: ${TZ:-UTC}
+      REVOLT__DATABASE__MONGODB: mongodb://stoat:${MONGO_PASSWORD}@database:27017/revolt?authSource=revolt&replicaSet=rs0
+      REVOLT__DATABASE__REDIS: redis://:${REDIS_PASSWORD}@redis:6379/
+      REVOLT__RABBIT__HOST: rabbit
+      REVOLT__RABBIT__PORT: '5672'
+      REVOLT__RABBIT__USERNAME: stoat
+      REVOLT__RABBIT__PASSWORD: ${RABBIT_PASSWORD}
+      REVOLT__FILES__S3__ENDPOINT: http://garage:3900
+      REVOLT__FILES__S3__ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      REVOLT__FILES__S3__SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      REVOLT__FILES__S3__DEFAULT_BUCKET: revolt-uploads
+      REVOLT__FILES__S3__REGION: garage
+      REVOLT__FILES__S3__PATH_STYLE_BUCKETS: 'true'
+      REVOLT__FILES__ENCRYPTION_KEY: ${FILES_ENCRYPTION_KEY}
+      REVOLT__PUSHD__VAPID__PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      REVOLT__PUSHD__VAPID__PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+      REVOLT__API__LIVEKIT__NODES__WORLDWIDE__KEY: ${LIVEKIT_KEY}
+      REVOLT__API__LIVEKIT__NODES__WORLDWIDE__SECRET: ${LIVEKIT_SECRET}
+    volumes:
+    - ./runtime-checks:/checks:ro
+    - type: bind
+      source: ./runtime-config/january/revolt
+      target: /Revolt.toml
+      read_only: true
+      bind:
+        create_host_path: false
+    healthcheck:
+      test: ["CMD", "/checks/ld-musl.so.1", "/checks/busybox", "nc", "-z", "-w", "3", "127.0.0.1", "14705"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 60s
+  gifbox:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    pids_limit: 128
+    mem_limit: 128m
+    tmpfs:
+    - /tmp:size=64m
+    read_only: true
+    image: ${GIFBOX_IMAGE:-ghcr.io/stoatchat/gifbox:v0.12.1@sha256:cf95abf5716e329d949c4836a3ceee559cd362aa6406ba45f4a26623c80844db}
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    networks:
+    - app
+    - data
+    - frontend
+    environment:
+      TZ: ${TZ:-UTC}
+      REVOLT__DATABASE__MONGODB: mongodb://stoat:${MONGO_PASSWORD}@database:27017/revolt?authSource=revolt&replicaSet=rs0
+      REVOLT__DATABASE__REDIS: redis://:${REDIS_PASSWORD}@redis:6379/
+      REVOLT__RABBIT__HOST: rabbit
+      REVOLT__RABBIT__PORT: '5672'
+      REVOLT__RABBIT__USERNAME: stoat
+      REVOLT__RABBIT__PASSWORD: ${RABBIT_PASSWORD}
+      REVOLT__FILES__S3__ENDPOINT: http://garage:3900
+      REVOLT__FILES__S3__ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      REVOLT__FILES__S3__SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      REVOLT__FILES__S3__DEFAULT_BUCKET: revolt-uploads
+      REVOLT__FILES__S3__REGION: garage
+      REVOLT__FILES__S3__PATH_STYLE_BUCKETS: 'true'
+      REVOLT__FILES__ENCRYPTION_KEY: ${FILES_ENCRYPTION_KEY}
+      REVOLT__PUSHD__VAPID__PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      REVOLT__PUSHD__VAPID__PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+      REVOLT__API__LIVEKIT__NODES__WORLDWIDE__KEY: ${LIVEKIT_KEY}
+      REVOLT__API__LIVEKIT__NODES__WORLDWIDE__SECRET: ${LIVEKIT_SECRET}
+    volumes:
+    - ./runtime-checks:/checks:ro
+    - type: bind
+      source: ./runtime-config/gifbox/revolt
+      target: /Revolt.toml
+      read_only: true
+      bind:
+        create_host_path: false
+    healthcheck:
+      test: ["CMD", "/checks/ld-musl.so.1", "/checks/busybox", "nc", "-z", "-w", "3", "127.0.0.1", "14706"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 60s
+  crond:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    pids_limit: 128
+    mem_limit: 128m
+    tmpfs:
+    - /tmp:size=64m
+    read_only: true
+    image: ${CROND_IMAGE:-ghcr.io/stoatchat/crond:v0.12.1@sha256:43baac0abbf62681c60ed4f147d5b186c6bedef148ff15e18101b9e3db90d699}
+    depends_on:
+      garage-init:
+        condition: service_completed_successfully
+      mongo-init:
+        condition: service_completed_successfully
+      api:
+        condition: service_started
+    networks:
+    - data
+    environment:
+      TZ: ${TZ:-UTC}
+      REVOLT__DATABASE__MONGODB: mongodb://stoat:${MONGO_PASSWORD}@database:27017/revolt?authSource=revolt&replicaSet=rs0
+      REVOLT__DATABASE__REDIS: redis://:${REDIS_PASSWORD}@redis:6379/
+      REVOLT__RABBIT__HOST: rabbit
+      REVOLT__RABBIT__PORT: '5672'
+      REVOLT__RABBIT__USERNAME: stoat
+      REVOLT__RABBIT__PASSWORD: ${RABBIT_PASSWORD}
+      REVOLT__FILES__S3__ENDPOINT: http://garage:3900
+      REVOLT__FILES__S3__ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      REVOLT__FILES__S3__SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      REVOLT__FILES__S3__DEFAULT_BUCKET: revolt-uploads
+      REVOLT__FILES__S3__REGION: garage
+      REVOLT__FILES__S3__PATH_STYLE_BUCKETS: 'true'
+      REVOLT__FILES__ENCRYPTION_KEY: ${FILES_ENCRYPTION_KEY}
+      REVOLT__PUSHD__VAPID__PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      REVOLT__PUSHD__VAPID__PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+      REVOLT__API__LIVEKIT__NODES__WORLDWIDE__KEY: ${LIVEKIT_KEY}
+      REVOLT__API__LIVEKIT__NODES__WORLDWIDE__SECRET: ${LIVEKIT_SECRET}
+    volumes:
+    - ./runtime-checks:/checks:ro
+    - type: bind
+      source: ./runtime-config/crond/revolt
+      target: /Revolt.toml
+      read_only: true
+      bind:
+        create_host_path: false
+    healthcheck:
+      test: ["CMD", "/checks/ld-musl.so.1", "/checks/busybox", "awk", "$$4 == \"01\" && $$3 ~ /:6989$$/ { found=1 } END { exit !found }", "/proc/net/tcp", "/proc/net/tcp6"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 60s
+  pushd:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    pids_limit: 128
+    mem_limit: 128m
+    tmpfs:
+    - /tmp:size=64m
+    read_only: true
+    image: ${PUSHD_IMAGE:-ghcr.io/stoatchat/pushd:v0.12.1@sha256:15f433bd80c0d445504cbdcd179b9a13fb84e36b05114b4fab8a9663f9d53e46}
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbit:
+        condition: service_healthy
+      mongo-init:
+        condition: service_completed_successfully
+    networks:
+    - data
+    - rabbit
+    - frontend
+    environment:
+      TZ: ${TZ:-UTC}
+      REVOLT__DATABASE__MONGODB: mongodb://stoat:${MONGO_PASSWORD}@database:27017/revolt?authSource=revolt&replicaSet=rs0
+      REVOLT__DATABASE__REDIS: redis://:${REDIS_PASSWORD}@redis:6379/
+      REVOLT__RABBIT__HOST: rabbit
+      REVOLT__RABBIT__PORT: '5672'
+      REVOLT__RABBIT__USERNAME: stoat
+      REVOLT__RABBIT__PASSWORD: ${RABBIT_PASSWORD}
+      REVOLT__FILES__S3__ENDPOINT: http://garage:3900
+      REVOLT__FILES__S3__ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      REVOLT__FILES__S3__SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      REVOLT__FILES__S3__DEFAULT_BUCKET: revolt-uploads
+      REVOLT__FILES__S3__REGION: garage
+      REVOLT__FILES__S3__PATH_STYLE_BUCKETS: 'true'
+      REVOLT__FILES__ENCRYPTION_KEY: ${FILES_ENCRYPTION_KEY}
+      REVOLT__PUSHD__VAPID__PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      REVOLT__PUSHD__VAPID__PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+      REVOLT__API__LIVEKIT__NODES__WORLDWIDE__KEY: ${LIVEKIT_KEY}
+      REVOLT__API__LIVEKIT__NODES__WORLDWIDE__SECRET: ${LIVEKIT_SECRET}
+    volumes:
+    - ./runtime-checks:/checks:ro
+    - type: bind
+      source: ./runtime-config/pushd/revolt
+      target: /Revolt.toml
+      read_only: true
+      bind:
+        create_host_path: false
+    healthcheck:
+      test: ["CMD", "/checks/ld-musl.so.1", "/checks/busybox", "awk", "$$4 == \"01\" && $$3 ~ /:1628$$/ { found=1 } END { exit !found }", "/proc/net/tcp", "/proc/net/tcp6"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 60s
+  voice-ingress:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    pids_limit: 128
+    mem_limit: 128m
+    tmpfs:
+    - /tmp:size=64m
+    read_only: true
+    image: ${VOICE_INGRESS_IMAGE:-ghcr.io/stoatchat/voice-ingress:v0.12.1@sha256:491ac94f07667a22f72fb5c25fd63a7850c943c478e7a3f1f45cb96e6354824a}
+    depends_on:
+      rabbit:
+        condition: service_healthy
+      mongo-init:
+        condition: service_completed_successfully
+    networks:
+    - app
+    - data
+    - rabbit
+    environment:
+      TZ: ${TZ:-UTC}
+      REVOLT__DATABASE__MONGODB: mongodb://stoat:${MONGO_PASSWORD}@database:27017/revolt?authSource=revolt&replicaSet=rs0
+      REVOLT__DATABASE__REDIS: redis://:${REDIS_PASSWORD}@redis:6379/
+      REVOLT__RABBIT__HOST: rabbit
+      REVOLT__RABBIT__PORT: '5672'
+      REVOLT__RABBIT__USERNAME: stoat
+      REVOLT__RABBIT__PASSWORD: ${RABBIT_PASSWORD}
+      REVOLT__FILES__S3__ENDPOINT: http://garage:3900
+      REVOLT__FILES__S3__ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      REVOLT__FILES__S3__SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      REVOLT__FILES__S3__DEFAULT_BUCKET: revolt-uploads
+      REVOLT__FILES__S3__REGION: garage
+      REVOLT__FILES__S3__PATH_STYLE_BUCKETS: 'true'
+      REVOLT__FILES__ENCRYPTION_KEY: ${FILES_ENCRYPTION_KEY}
+      REVOLT__PUSHD__VAPID__PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      REVOLT__PUSHD__VAPID__PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+      REVOLT__API__LIVEKIT__NODES__WORLDWIDE__KEY: ${LIVEKIT_KEY}
+      REVOLT__API__LIVEKIT__NODES__WORLDWIDE__SECRET: ${LIVEKIT_SECRET}
+    volumes:
+    - ./runtime-checks:/checks:ro
+    - type: bind
+      source: ./runtime-config/voice-ingress/revolt
+      target: /Revolt.toml
+      read_only: true
+      bind:
+        create_host_path: false
+    healthcheck:
+      test: ["CMD", "/checks/ld-musl.so.1", "/checks/busybox", "nc", "-z", "-w", "3", "127.0.0.1", "8500"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 60s
+  livekit:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    pids_limit: 128
+    mem_limit: 256m
+    tmpfs:
+    - /tmp:size=64m
+    image: ${LIVEKIT_IMAGE:-ghcr.io/stoatchat/livekit-server:v1.9.13@sha256:affc38db52172aa994b4457804f1568c0fa7a5ac59096e1041408f69689c8d90}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+    - app
+    - voice
+    - frontend
+    user: 65532:65532
+    command:
+    - --config
+    - /etc/livekit.yml
+    ports:
+    - ${VOICE_TCP_PORT}:${VOICE_TCP_PORT}/tcp
+    - ${VOICE_UDP_START}-${VOICE_UDP_END}:${VOICE_UDP_START}-${VOICE_UDP_END}/udp
+    read_only: true
+    environment:
+      TZ: ${TZ:-UTC}
+    volumes:
+    - ./runtime-checks:/checks:ro
+    - type: bind
+      source: ./runtime-config/livekit/livekit
+      target: /etc/livekit.yml
+      read_only: true
+      bind:
+        create_host_path: false
+    healthcheck:
+      test: ["CMD", "/checks/ld-musl.so.1", "/checks/busybox", "wget", "-q", "-T", "3", "-O", "/dev/null", "http://127.0.0.1:7880/"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 60s
+  web:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    pids_limit: 128
+    mem_limit: 256m
+    tmpfs:
+    - /tmp:size=64m
+    image: ${WEB_IMAGE:-ghcr.io/stoatchat/for-web:0b94704@sha256:422549b7ecd4cf8b6d99c1b3ba4f1c3e5e4e12c7ffda8186f73fce4c6f8d199e}
+    command: ["sh", "-c", "node inject.js && exec ./node_modules/.bin/sirv dist_injected --port 5000 --cors --single --host"]
+    networks:
+    - app
+    healthcheck:
+      test:
+      - CMD
+      - node
+      - -e
+      - fetch('http://127.0.0.1:5000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    environment:
+      TZ: ${TZ:-UTC}
+      REVOLT_PUBLIC_URL: ${BASE_URL}/api
+      VITE_API_URL: ${BASE_URL}/api
+      VITE_WS_URL: ${WS_URL}/ws
+      VITE_MEDIA_URL: ${BASE_URL}/autumn
+      VITE_PROXY_URL: ${BASE_URL}/january
+      VITE_GIFBOX_URL: ${BASE_URL}/gifbox
+      VITE_CFG_ENABLE_VIDEO: 'true'
+  caddy:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    # The upstream caddy binary carries cap_net_bind_service=ep, so exec fails unless the bounding set keeps it.
+    cap_add:
+    - NET_BIND_SERVICE
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    pids_limit: 128
+    mem_limit: 128m
+    tmpfs:
+    - /tmp:size=64m
+    image: ${CADDY_IMAGE:-dhi.io/caddy:2.11.4-debian13@sha256:30e6971d630b5504dc6469a9b425a31a5334029dc725baa5aca535967e24da55}
+    depends_on:
+    - api
+    - events
+    - web
+    networks:
+    - frontend
+    - app
+    command:
+    - run
+    - --config
+    - /etc/caddy/Caddyfile
+    - --adapter
+    - caddyfile
+    volumes:
+    - ./runtime-checks:/checks:ro
+    - ./caddy/data:/data
+    - ./caddy/config:/config
+    - type: bind
+      source: ./runtime-config/caddy/Caddyfile
+      target: /etc/caddy/Caddyfile
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ./runtime-config/caddy/stoat-json
+      target: /srv/stoat.json
+      read_only: true
+      bind:
+        create_host_path: false
+    ports:
+    - 127.0.0.1:${PORT}:8080
+    read_only: true
+    environment:
+      TZ: ${TZ:-UTC}
+    user: ${CADDY_UID:-65532}:${CADDY_GID:-65532}
+    entrypoint:
+    - ${CADDY_ENTRYPOINT:-/usr/local/bin/caddy}
+    healthcheck:
+      test: ["CMD", "/checks/ld-musl.so.1", "/checks/busybox", "wget", "-q", "-T", "3", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 60s
+  mongo-init:
+    restart: 'no'
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    pids_limit: 128
+    mem_limit: 256m
+    tmpfs:
+    - /tmp:size=64m
+    - /data/db:size=1m
+    - /data/configdb:size=1m
+    image: ${MONGOSH_IMAGE:-dhi.io/mongodb:8.3.8-debian13-compat@sha256:28c34d6715e7bbb9ced703f08252d5ff99709f18e6cd419ba1881cdda6ff088c}
+    depends_on:
+      database:
+        condition: service_healthy
+    user: 1000:1000
+    network_mode: service:database
+    environment:
+      HOME: /tmp
+      MONGO_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_PASSWORD: ${MONGO_PASSWORD}
+      TZ: ${TZ:-UTC}
+    entrypoint:
+    - mongosh
+    - --nodb
+    - --quiet
+    - --file
+    - /init-mongo.js
+    read_only: true
+    volumes:
+    - type: bind
+      source: ./runtime-config/mongo-init/init-scripts-init-mongo-js
+      target: /init-mongo.js
+      read_only: true
+      bind:
+        create_host_path: false
+  garage-init:
+    restart: 'no'
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    pids_limit: 128
+    mem_limit: 128m
+    tmpfs:
+    - /tmp:size=64m
+    image: ${PYTHON_IMAGE:-dhi.io/python:3.13-alpine3.24@sha256:4d5dbd8052078d1230f8288abf0f37921a7a387cc5dc8d250415b0ccbe245905}
+    depends_on:
+      garage:
+        condition: service_healthy
+      api:
+        condition: service_started
+    networks:
+    - data
+    - frontend
+    user: 65532:65532
+    environment:
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      TZ: ${TZ:-UTC}
+    entrypoint:
+    - python3
+    - /init-garage.py
+    read_only: true
+    volumes:
+    - type: bind
+      source: ./runtime-config/garage-init/init-scripts-init-garage-py
+      target: /init-garage.py
+      read_only: true
+      bind:
+        create_host_path: false
+  prepare:
+    image: ${PREPARE_IMAGE:-dhi.io/busybox:1.37.0-alpine3.24@sha256:cf19544e3830bfd972cd1ab793be113129c61f214583648d590289eaa938ce5a}
+    profiles: [init]
+    restart: "no"
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 32m
+    pids_limit: 32
+    volumes: [.:/project]
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        cd /project
+        mkdir -p runtime-checks
+        chmod 0755 runtime-checks
+        cp /bin/busybox runtime-checks/busybox
+        chmod 0555 runtime-checks/busybox
+        cp /lib/ld-musl-*.so.1 runtime-checks/ld-musl.so.1
+        chmod 0555 runtime-checks/ld-musl.so.1
+        umask 077
+        mkdir -p mongo mongo-config redis rabbit garage/meta garage/data caddy/data caddy/config
+        chown -R 999:999 mongo mongo-config
+        chmod 0700 mongo mongo-config
+        chown -R ${REDIS_UID:-65532}:${REDIS_GID:-65532} redis
+        chmod 0700 redis
+        chown -R ${RABBITMQ_UID:-65532}:${RABBITMQ_GID:-65532} rabbit
+        chmod 0700 rabbit
+        chown -R 0:0 garage
+        chmod 0700 garage/meta garage/data
+        chown -R ${CADDY_UID:-65532}:${CADDY_GID:-65532} caddy
+        chmod 0700 caddy/data caddy/config
+        mkdir -p runtime-config/redis
+        chmod 0711 runtime-config/redis
+        cat > runtime-config/redis/redis-conf.next <<'RECIPEFILE'
+        bind 0.0.0.0
+        protected-mode yes
+        requirepass ${REDIS_PASSWORD}
+        appendonly yes
+        dir /data
+        RECIPEFILE
+        chown ${REDIS_UID:-65532}:${REDIS_GID:-65532} runtime-config/redis/redis-conf.next
+        chmod 0400 runtime-config/redis/redis-conf.next
+        mv runtime-config/redis/redis-conf.next runtime-config/redis/redis-conf
+        mkdir -p runtime-config/garage
+        chmod 0711 runtime-config/garage
+        cat > runtime-config/garage/garage-toml.next <<'RECIPEFILE'
+        metadata_dir = "/var/lib/garage/meta"
+        data_dir = "/var/lib/garage/data"
+        db_engine = "sqlite"
+        replication_factor = 1
+        rpc_bind_addr = "[::]:3901"
+        rpc_public_addr = "garage:3901"
+        rpc_secret = "${GARAGE_RPC_SECRET}"
+
+        [s3_api]
+        s3_region = "garage"
+        api_bind_addr = "[::]:3900"
+        root_domain = ".s3.garage"
+
+        [admin]
+        api_bind_addr = "[::]:3903"
+        admin_token = "${GARAGE_ADMIN_TOKEN}"
+        metrics_token = "${GARAGE_METRICS_TOKEN}"
+        RECIPEFILE
+        chown 0:0 runtime-config/garage/garage-toml.next
+        chmod 0400 runtime-config/garage/garage-toml.next
+        mv runtime-config/garage/garage-toml.next runtime-config/garage/garage-toml
+        mkdir -p runtime-config/livekit
+        chmod 0711 runtime-config/livekit
+        cat > runtime-config/livekit/livekit.next <<'RECIPEFILE'
+        port: 7880
+        rtc:
+          use_external_ip: false
+          node_ip: ${VOICE_IP}
+          port_range_start: ${VOICE_UDP_START}
+          port_range_end: ${VOICE_UDP_END}
+          tcp_port: ${VOICE_TCP_PORT}
+        redis:
+          address: redis:6379
+          password: "${REDIS_PASSWORD}"
+        turn:
+          enabled: false
+        keys:
+          ${LIVEKIT_KEY}: ${LIVEKIT_SECRET}
+        webhook:
+          api_key: ${LIVEKIT_KEY}
+          urls:
+          - "http://voice-ingress:8500/worldwide"
+        RECIPEFILE
+        chown 65532:65532 runtime-config/livekit/livekit.next
+        chmod 0400 runtime-config/livekit/livekit.next
+        mv runtime-config/livekit/livekit.next runtime-config/livekit/livekit
+        mkdir -p runtime-config/caddy
+        chmod 0711 runtime-config/caddy
+        cat > runtime-config/caddy/Caddyfile.next <<'RECIPEFILE'
+        {
+            admin off
+            auto_https off
+        }
+        :8080 {
+            handle_path /api* {
+                reverse_proxy api:14702 {
+                    header_down Location "^/" "/api/"
+                }
+            }
+            handle_path /ws* {
+                reverse_proxy events:14703
+            }
+            handle_path /autumn* {
+                reverse_proxy autumn:14704
+            }
+            handle_path /january* {
+                reverse_proxy january:14705
+            }
+            handle_path /gifbox* {
+                reverse_proxy gifbox:14706
+            }
+            handle_path /livekit* {
+                reverse_proxy livekit:7880
+            }
+            handle_path /ingress* {
+                reverse_proxy voice-ingress:8500
+            }
+            handle /stoat.json {
+                root * /srv
+                file_server
+            }
+            handle {
+                reverse_proxy web:5000
+            }
+        }
+        RECIPEFILE
+        chown ${CADDY_UID:-65532}:${CADDY_GID:-65532} runtime-config/caddy/Caddyfile.next
+        chmod 0444 runtime-config/caddy/Caddyfile.next
+        mv runtime-config/caddy/Caddyfile.next runtime-config/caddy/Caddyfile
+        mkdir -p runtime-config/caddy
+        chmod 0711 runtime-config/caddy
+        cat > runtime-config/caddy/stoat-json.next <<'RECIPEFILE'
+        {"api":"${BASE_URL}/api"}
+        RECIPEFILE
+        chown ${CADDY_UID:-65532}:${CADDY_GID:-65532} runtime-config/caddy/stoat-json.next
+        chmod 0444 runtime-config/caddy/stoat-json.next
+        mv runtime-config/caddy/stoat-json.next runtime-config/caddy/stoat-json
+        mkdir -p runtime-config/mongo-init
+        chmod 0711 runtime-config/mongo-init
+        cat > runtime-config/mongo-init/init-scripts-init-mongo-js.next <<'RECIPEFILE'
+        const deadline = Date.now() + 120000;
+        let connection;
+        while (Date.now() < deadline) {
+            try {
+                connection = new Mongo('mongodb://127.0.0.1:27017/?directConnection=true&serverSelectionTimeoutMS=2000');
+                if (connection.getDB('admin').runCommand({ping: 1}).ok) break;
+            } catch (e) {
+                if (Date.now() + 1000 >= deadline) throw e;
+            }
+            sleep(1000);
+        }
+        if (!connection) throw new Error('MongoDB startup timed out.');
+        const admin = connection.getDB('admin');
+        function waitForPrimary() {
+            while (!admin.runCommand({hello: 1}).isWritablePrimary) {
+                if (Date.now() >= deadline) throw new Error('MongoDB primary election timed out.');
+                sleep(500);
+            }
+        }
+        let authenticated = false;
+        try {
+            authenticated = !!admin.auth('admin', process.env.MONGO_ROOT_PASSWORD);
+        } catch (e) {
+            if (e.code !== 18) throw e;
+        }
+        if (!authenticated) {
+            try {
+                admin.runCommand({replSetGetStatus: 1});
+            } catch (e) {
+                if (e.code !== 94) throw e;
+                const result = admin.runCommand({replSetInitiate: {_id: 'rs0', members: [{_id: 0, host: 'database:27017'}]}});
+                if (!result.ok) throw new Error('Replica set initialization failed.');
+            }
+            waitForPrimary();
+            admin.createUser({user: 'admin', pwd: process.env.MONGO_ROOT_PASSWORD, roles: ['root']});
+            if (!admin.auth('admin', process.env.MONGO_ROOT_PASSWORD)) throw new Error('MongoDB authentication failed.');
+        }
+        waitForPrimary();
+        const app = connection.getDB('revolt');
+        if (!app.getUser('stoat')) {
+            app.createUser({user: 'stoat', pwd: process.env.MONGO_PASSWORD, roles: ['readWrite', 'dbAdmin']});
+        }
+        if (!admin.runCommand({hello: 1}).isWritablePrimary) throw new Error('MongoDB has no writable primary.');
+        print('MongoDB replica set and application user are ready.');
+        RECIPEFILE
+        chown 1000:1000 runtime-config/mongo-init/init-scripts-init-mongo-js.next
+        chmod 0444 runtime-config/mongo-init/init-scripts-init-mongo-js.next
+        mv runtime-config/mongo-init/init-scripts-init-mongo-js.next runtime-config/mongo-init/init-scripts-init-mongo-js
+        mkdir -p runtime-config/garage-init
+        chmod 0711 runtime-config/garage-init
+        cat > runtime-config/garage-init/init-scripts-init-garage-py.next <<'RECIPEFILE'
+        import json
+        import os
+        import time
+        import urllib.error
+        import urllib.request
+
+        base = 'http://garage:3903/v2/'
+        headers = {'Authorization': 'Bearer ' + os.environ['GARAGE_ADMIN_TOKEN'], 'Content-Type': 'application/json'}
+
+        def request(operation, data=None):
+            body = None if data is None else json.dumps(data).encode()
+            with urllib.request.urlopen(urllib.request.Request(base + operation, data=body, headers=headers), timeout=10) as response:
+                return json.load(response)
+
+        layout = request('GetClusterLayout')
+        if layout['version'] == 0:
+            nodes = [node['id'] for node in request('GetClusterStatus')['nodes'] if node['isUp']]
+            if len(nodes) != 1:
+                raise RuntimeError('Expected one active Garage node.')
+            request('UpdateClusterLayout', {'roles': [{'id': nodes[0], 'zone': 'local', 'capacity': 10737418240, 'tags': []}]})
+            request('ApplyClusterLayout', {'version': 1})
+            if request('GetClusterLayout')['version'] != 1:
+                raise RuntimeError('Garage layout was not applied.')
+
+        key = os.environ['S3_ACCESS_KEY']
+        if not any(item['id'] == key for item in request('ListKeys')):
+            request('ImportKey', {'accessKeyId': key, 'secretAccessKey': os.environ['S3_SECRET_KEY'], 'name': 'stoat'})
+        buckets = [item for item in request('ListBuckets') if 'revolt-uploads' in item.get('globalAliases', [])]
+        bucket = buckets[0] if buckets else request('CreateBucket', {'globalAlias': 'revolt-uploads'})
+        request('AllowBucketKey', {'bucketId': bucket['id'], 'accessKeyId': key, 'permissions': {'read': True, 'write': True, 'owner': True}})
+        for attempt in range(30):
+            try:
+                with urllib.request.urlopen('http://garage:3903/health', timeout=5) as response:
+                    if response.status == 200:
+                        break
+            except urllib.error.URLError:
+                pass
+            time.sleep(1)
+        else:
+            raise RuntimeError('Garage health check timed out.')
+        for attempt in range(120):
+            try:
+                with urllib.request.urlopen('http://api:14702/', timeout=5) as response:
+                    if response.status == 200:
+                        break
+            except urllib.error.URLError:
+                pass
+            time.sleep(1)
+        else:
+            raise RuntimeError('Stoat API migrations timed out.')
+        print('Garage storage and Stoat API migrations are ready.')
+        RECIPEFILE
+        chown 65532:65532 runtime-config/garage-init/init-scripts-init-garage-py.next
+        chmod 0444 runtime-config/garage-init/init-scripts-init-garage-py.next
+        mv runtime-config/garage-init/init-scripts-init-garage-py.next runtime-config/garage-init/init-scripts-init-garage-py
+        cat > runtime-config/revolt.tmp <<'RECIPEFILE'
+        [hosts]
+        app = "${BASE_URL}"
+        api = "${BASE_URL}/api"
+        events = "${WS_URL}/ws"
+        autumn = "${BASE_URL}/autumn"
+        january = "${BASE_URL}/january"
+        gifbox = "${BASE_URL}/gifbox"
+
+        [hosts.livekit]
+        worldwide = "${WS_URL}/livekit"
+
+        [api.livekit.nodes.worldwide]
+        url = "http://livekit:7880"
+        lat = 0.0
+        lon = 0.0
+
+        [api.registration]
+        invite_only = false
+
+        [features]
+        webhooks_enabled = false
+
+        [features.limits.new_user]
+        video_resolution = [1920, 1080]
+        video_aspect_ratio = [0.3, 10]
+
+        [features.limits.default]
+        video_resolution = [1920, 1080]
+        video_aspect_ratio = [0.3, 10]
+        RECIPEFILE
+        for service in api events autumn january gifbox crond pushd voice-ingress; do
+          mkdir -p "runtime-config/$$service"
+          chmod 0711 "runtime-config/$$service"
+          cp runtime-config/revolt.tmp "runtime-config/$$service/revolt.next"
+          chown 65532:65532 "runtime-config/$$service/revolt.next"
+          chmod 0444 "runtime-config/$$service/revolt.next"
+          mv "runtime-config/$$service/revolt.next" "runtime-config/$$service/revolt"
+        done
+        rm -f runtime-config/revolt.tmp
+        echo "Data directories and runtime configuration are ready."
+networks:
+  frontend: {}
+  app:
+    internal: true
+  data:
+    internal: true
+  rabbit:
+    internal: true
+  voice:
+    internal: true
+configs:
+  mongo-key:
+    content: |
+      ${MONGO_KEY}

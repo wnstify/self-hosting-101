@@ -1,0 +1,176 @@
+services:
+  postgres:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${POSTGRES_IMAGE:-postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2}
+    user: ${POSTGRES_UID:-70}:${POSTGRES_GID:-70}
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: ${TZ}
+      PGDATA: /var/lib/postgresql/18/data
+    volumes:
+    - ./postgres:/var/lib/postgresql
+    networks:
+    - database
+    tmpfs:
+    - /tmp:size=64M,mode=1777
+    - /run/postgresql:size=32M,uid=${POSTGRES_UID:-70},gid=${POSTGRES_GID:-70},mode=0755
+    stop_grace_period: 30s
+    mem_limit: 256m
+    pids_limit: 100
+    healthcheck:
+      test:
+      - CMD
+      - pg_isready
+      - -h
+      - 127.0.0.1
+      - -U
+      - postgres
+      - -d
+      - postgres
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+  database-init:
+    restart: 'no'
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${POSTGRES_IMAGE:-postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2}
+    user: ${POSTGRES_UID:-70}:${POSTGRES_GID:-70}
+    read_only: true
+    entrypoint:
+    - psql
+    command:
+    - -h
+    - postgres
+    - -U
+    - postgres
+    - -d
+    - postgres
+    - -v
+    - ON_ERROR_STOP=1
+    - -f
+    - /init.sql
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGCONNECT_TIMEOUT: '10'
+      PGOPTIONS: -c statement_timeout=30000
+    networks:
+    - database
+    mem_limit: 64m
+    pids_limit: 32
+    depends_on:
+      postgres:
+        condition: service_healthy
+    tmpfs:
+    - /var/lib/postgresql:size=1m,uid=${POSTGRES_UID:-70},gid=${POSTGRES_GID:-70},mode=0700
+    volumes:
+    - type: bind
+      source: ./runtime-config/database-init/config-init-sql
+      target: /init.sql
+      read_only: true
+      bind:
+        create_host_path: false
+  vaultwarden:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${VAULTWARDEN_IMAGE:-vaultwarden/server:1.37.2@sha256:094b5689ed81549bd293418395c7cf495ae9d960fc2d4928cef2083ef913d912}
+    user: 1000:1000
+    read_only: true
+    environment:
+      DATABASE_URL: postgresql://vaultwarden:${VAULTWARDEN_DB_PASSWORD}@postgres:5432/vaultwarden
+      ADMIN_TOKEN: ${ADMIN_TOKEN}
+      DOMAIN: ${DOMAIN:-https://${VAULTWARDEN_DOMAIN:-vaultwarden.example.com}}
+      SIGNUPS_ALLOWED: 'false'
+      INVITATIONS_ALLOWED: 'false'
+      WEBSOCKET_ENABLED: 'true'
+      ROCKET_PORT: '8080'
+      TZ: ${TZ}
+      UMASK: '0077'
+    ports:
+    - 127.0.0.1:${PORT}:8080
+    volumes:
+    - ./data:/data
+    tmpfs:
+    - /tmp:size=64M,mode=1777
+    networks:
+    - frontend
+    - database
+    mem_limit: 256m
+    pids_limit: 200
+    depends_on:
+      database-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+      - CMD
+      - /healthcheck.sh
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+  # Compose cannot mount an inline config into a read-only service, so prepare writes the files itself.
+  prepare:
+    image: ${PREPARE_IMAGE:-busybox:1.37.0-musl@sha256:fc6dddc4c44b1bfe37f41cae8e67d1693828e8f42a91862816d7953e2c9d3f23}
+    profiles: [init]
+    restart: "no"
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 32m
+    pids_limit: 32
+    volumes: [.:/project]
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        cd /project
+        umask 077
+        mkdir -p postgres data runtime-config/database-init
+        chown -R ${POSTGRES_UID:-70}:${POSTGRES_GID:-70} postgres
+        chmod 0700 postgres
+        chown -R 1000:1000 data
+        chmod 0700 data
+        chmod 0711 runtime-config/database-init
+        cat >runtime-config/database-init/config-init-sql.next <<'SQL'
+        SELECT 'CREATE ROLE vaultwarden LOGIN PASSWORD ''${VAULTWARDEN_DB_PASSWORD}'''
+        WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'vaultwarden') \gexec
+        SELECT 'CREATE DATABASE vaultwarden OWNER vaultwarden'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'vaultwarden') \gexec
+        SQL
+        chown ${POSTGRES_UID:-70}:${POSTGRES_GID:-70} runtime-config/database-init/config-init-sql.next
+        chmod 0400 runtime-config/database-init/config-init-sql.next
+        mv runtime-config/database-init/config-init-sql.next runtime-config/database-init/config-init-sql
+        echo "Data directories and configuration files are ready."
+networks:
+  frontend: {}
+  database:
+    internal: true

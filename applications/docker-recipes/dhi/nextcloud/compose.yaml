@@ -1,0 +1,476 @@
+services:
+  postgres:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${POSTGRES_IMAGE:-dhi.io/postgres:18.6-alpine3.24@sha256:d23585213fe835f109c6c74e68679c9c96fe6d3debe569b6c0fc89dc7f2977d0}
+    user: ${POSTGRES_UID:-70}:${POSTGRES_GID:-70}
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: ${TZ}
+      PGDATA: /var/lib/postgresql/18/data
+    volumes:
+    - ./postgres:/var/lib/postgresql
+    networks:
+    - database
+    tmpfs:
+    - /tmp:size=64M,mode=1777
+    - /run/postgresql:size=32M,uid=${POSTGRES_UID:-70},gid=${POSTGRES_GID:-70},mode=0755
+    stop_grace_period: 30s
+    mem_limit: 384m
+    pids_limit: 100
+    healthcheck:
+      test:
+      - CMD
+      - pg_isready
+      - -h
+      - 127.0.0.1
+      - -U
+      - postgres
+      - -d
+      - postgres
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+  database-init:
+    restart: 'no'
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${POSTGRES_IMAGE:-dhi.io/postgres:18.6-alpine3.24@sha256:d23585213fe835f109c6c74e68679c9c96fe6d3debe569b6c0fc89dc7f2977d0}
+    user: ${POSTGRES_UID:-70}:${POSTGRES_GID:-70}
+    read_only: true
+    tmpfs:
+    - /var/lib/postgresql:size=8M,mode=0700,uid=${POSTGRES_UID:-70},gid=${POSTGRES_GID:-70}
+    entrypoint:
+    - psql
+    command:
+    - -h
+    - postgres
+    - -U
+    - postgres
+    - -d
+    - postgres
+    - -v
+    - ON_ERROR_STOP=1
+    - -f
+    - /init.sql
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGCONNECT_TIMEOUT: '10'
+      PGOPTIONS: -c statement_timeout=30000
+    networks:
+    - database
+    mem_limit: 64m
+    pids_limit: 32
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+    - type: bind
+      source: ./runtime-config/database-init/init-sql
+      target: /init.sql
+      read_only: true
+      bind:
+        create_host_path: false
+  redis:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${REDIS_IMAGE:-dhi.io/redis:8.6.6-alpine3.24@sha256:cb9af3bcc8ef8bba975242aba5a96d3307977380e1ef687b66aa9ff86477818d}
+    user: ${REDIS_UID:-65532}:${REDIS_GID:-65532}
+    read_only: true
+    command:
+    - redis-server
+    - /etc/redis/redis.conf
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    volumes:
+    - ./redis:/data
+    - type: bind
+      source: ./runtime-config/redis/redis-conf
+      target: /etc/redis/redis.conf
+      read_only: true
+      bind:
+        create_host_path: false
+    networks:
+    - database
+    mem_limit: 128m
+    pids_limit: 64
+    healthcheck:
+      test:
+      - CMD
+      - redis-cli
+      - -e
+      - ping
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+  app:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${NEXTCLOUD_IMAGE:-nextcloud:34.0.3-fpm-alpine@sha256:a953332f3e98441f268b5b85d298d285f66ea6054fa3988e22a127f291de26f5}
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: nextcloud
+      POSTGRES_USER: nextcloud
+      POSTGRES_PASSWORD: ${NEXTCLOUD_DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_HOST_PASSWORD: ${REDIS_PASSWORD}
+      OVERWRITEHOST: ${SITE_HOST}
+      OVERWRITEPROTOCOL: ${SITE_PROTOCOL}
+      OVERWRITECLIURL: ${SITE_URL}
+      TRUSTED_PROXIES: 127.0.0.1 ::1 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16
+      TZ: ${TZ}
+      PHP_MEMORY_LIMIT: 512M
+      PHP_UPLOAD_LIMIT: 512M
+      TMPDIR: /var/www/tmp
+      NEXTCLOUD_ADMIN_USER: ${ADMIN_USER}
+      NEXTCLOUD_ADMIN_PASSWORD: ${NEXTCLOUD_ADMIN_PASSWORD}
+      NEXTCLOUD_TRUSTED_DOMAINS: localhost 127.0.0.1 ${SITE_HOST}
+    volumes:
+    - ./html:/var/www/html
+    - ./temp:/var/www/tmp
+    networks:
+    - frontend
+    - database
+    cap_add:
+    - CHOWN
+    - SETUID
+    - SETGID
+    - DAC_OVERRIDE
+    - FOWNER
+    - KILL
+    tmpfs:
+    - /tmp:size=256M,mode=1777
+    mem_limit: 768m
+    pids_limit: 100
+    depends_on:
+      database-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD
+      - php
+      - -r
+      - 'require "/var/www/html/config/config.php"; exit(!empty($$CONFIG["installed"]) && @fsockopen("127.0.0.1",9000) ? 0
+        : 1);'
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 180s
+    configs:
+    - source: nextcloud-config
+      target: /usr/src/nextcloud/config/standalone.config.php
+      mode: '0444'
+  nginx:
+    # Starting nginx directly skips the image entrypoint scripts, which write to the read-only root filesystem.
+    entrypoint: [nginx]
+    command: [-g, "daemon off;"]
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${NGINX_IMAGE:-dhi.io/nginx:1.30.4-alpine3.24@sha256:3551ea4702923409fe0f138d86f9994fb5f5a19f2d35dad9cb62c099642119d7}
+    user: ${NGINX_UID:-65532}:${NGINX_GID:-65532}
+    group_add:
+    - '82'
+    read_only: true
+    volumes:
+    - ./html:/var/www/html:ro
+    - ./nginx-cache:/var/cache/nginx
+    - type: bind
+      source: ./runtime-config/nginx/nginx-conf
+      target: /etc/nginx/nginx.conf
+      read_only: true
+      bind:
+        create_host_path: false
+    ports:
+    - 127.0.0.1:${PORT}:8080
+    networks:
+    - frontend
+    tmpfs:
+    - /tmp:size=128M,mode=1777
+    mem_limit: 768m
+    pids_limit: 64
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - -q
+      - -O
+      - /dev/null
+      - http://127.0.0.1:8080/status.php
+      interval: 10s
+      timeout: 5s
+      retries: 12
+  cron:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${NEXTCLOUD_IMAGE:-nextcloud:34.0.3-fpm-alpine@sha256:a953332f3e98441f268b5b85d298d285f66ea6054fa3988e22a127f291de26f5}
+    user: 82:82
+    read_only: true
+    init: true
+    entrypoint:
+    - /bin/sh
+    - /checks/cron.sh
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: nextcloud
+      POSTGRES_USER: nextcloud
+      POSTGRES_PASSWORD: ${NEXTCLOUD_DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_HOST_PASSWORD: ${REDIS_PASSWORD}
+      OVERWRITEHOST: ${SITE_HOST}
+      OVERWRITEPROTOCOL: ${SITE_PROTOCOL}
+      OVERWRITECLIURL: ${SITE_URL}
+      TRUSTED_PROXIES: 127.0.0.1 ::1 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16
+      TZ: ${TZ}
+      PHP_MEMORY_LIMIT: 512M
+      PHP_UPLOAD_LIMIT: 512M
+      TMPDIR: /var/www/tmp
+    volumes:
+    - ./html:/var/www/html
+    - ./temp:/var/www/tmp
+    - type: bind
+      source: ./runtime-config/cron/cron-sh
+      target: /checks/cron.sh
+      read_only: true
+      bind:
+        create_host_path: false
+    networks:
+    - frontend
+    - database
+    tmpfs:
+    - /tmp:size=128M,mode=1777
+    mem_limit: 512m
+    pids_limit: 64
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD
+      - php
+      - -r
+      - 'exit(is_file("/tmp/cron-ready") && time() - filemtime("/tmp/cron-ready") < 1200 ? 0 : 1);'
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 300s
+  prepare:
+    image: ${PREPARE_IMAGE:-dhi.io/busybox:1.37.0-alpine3.24@sha256:cf19544e3830bfd972cd1ab793be113129c61f214583648d590289eaa938ce5a}
+    profiles: [init]
+    restart: "no"
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 32m
+    pids_limit: 32
+    volumes: [.:/project]
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        cd /project
+        umask 077
+        mkdir -p postgres redis html temp nginx-cache runtime-config/database-init runtime-config/redis runtime-config/nginx runtime-config/cron
+        chown -R ${POSTGRES_UID:-70}:${POSTGRES_GID:-70} postgres
+        chmod 0700 postgres
+        chown -R ${REDIS_UID:-65532}:${REDIS_GID:-65532} redis
+        chmod 0750 redis
+        chown -R 82:82 html temp
+        chmod 0750 html temp
+        chown -R ${NGINX_UID:-65532}:${NGINX_GID:-65532} nginx-cache
+        chmod 0750 nginx-cache
+        chmod 0711 runtime-config runtime-config/database-init runtime-config/redis runtime-config/nginx runtime-config/cron
+        cat > runtime-config/database-init/init-sql.next <<'SQL'
+        SELECT 'CREATE ROLE nextcloud LOGIN PASSWORD ''${NEXTCLOUD_DB_PASSWORD}'''
+        WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'nextcloud') \gexec
+        SELECT 'CREATE DATABASE nextcloud OWNER nextcloud'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nextcloud') \gexec
+        SQL
+        chown ${POSTGRES_UID:-70}:${POSTGRES_GID:-70} runtime-config/database-init/init-sql.next
+        chmod 0400 runtime-config/database-init/init-sql.next
+        mv runtime-config/database-init/init-sql.next runtime-config/database-init/init-sql
+        cat > runtime-config/redis/redis-conf.next <<'CONF'
+        bind 0.0.0.0
+        protected-mode yes
+        requirepass ${REDIS_PASSWORD}
+        dir /data
+        appendonly yes
+        maxmemory 96mb
+        maxmemory-policy noeviction
+        CONF
+        chown ${REDIS_UID:-65532}:${REDIS_GID:-65532} runtime-config/redis/redis-conf.next
+        chmod 0400 runtime-config/redis/redis-conf.next
+        mv runtime-config/redis/redis-conf.next runtime-config/redis/redis-conf
+        cat > runtime-config/nginx/nginx-conf.next <<'NGINX'
+        worker_processes auto;
+        error_log /dev/stderr warn;
+        pid /tmp/nginx.pid;
+        events { worker_connections 1024; }
+        http {
+            include /etc/nginx/mime.types;
+            default_type application/octet-stream;
+            types { text/javascript mjs; }
+            access_log /dev/stdout;
+            client_body_temp_path /var/cache/nginx/client_body;
+            proxy_temp_path /tmp/proxy;
+            fastcgi_temp_path /tmp/fastcgi;
+            uwsgi_temp_path /tmp/uwsgi;
+            scgi_temp_path /tmp/scgi;
+            sendfile on;
+            server_tokens off;
+            keepalive_timeout 65;
+            resolver 127.0.0.11 valid=2s;
+            upstream php-handler {
+                zone backends 64k;
+                server app:9000 resolve;
+            }
+            map $$arg_v $$asset_immutable { "" ""; default ", immutable"; }
+            server {
+                listen 8080;
+                server_name _;
+                absolute_redirect off;
+                client_max_body_size 512M;
+                client_body_timeout 300s;
+                client_body_buffer_size 512k;
+                fastcgi_buffers 64 4K;
+                add_header Referrer-Policy no-referrer always;
+                add_header X-Content-Type-Options nosniff always;
+                add_header X-Frame-Options SAMEORIGIN always;
+                add_header X-Permitted-Cross-Domain-Policies none always;
+                add_header X-Robots-Tag "noindex, nofollow" always;
+                fastcgi_hide_header X-Powered-By;
+                root /var/www/html;
+                index index.php index.html /index.php$$request_uri;
+                location = / {
+                    if ($$http_user_agent ~ ^DavClnt) { return 302 /remote.php/webdav/$$is_args$$args; }
+                }
+                location = /robots.txt { allow all; log_not_found off; access_log off; }
+                location ^~ /.well-known {
+                    location = /.well-known/carddav { return 301 /remote.php/dav/; }
+                    location = /.well-known/caldav { return 301 /remote.php/dav/; }
+                    location /.well-known/acme-challenge { try_files $$uri $$uri/ =404; }
+                    location /.well-known/pki-validation { try_files $$uri $$uri/ =404; }
+                    return 301 /index.php$$request_uri;
+                }
+                location ~ ^/(?:build|tests|config|lib|3rdparty|templates|data)(?:$$|/) { return 404; }
+                location ~ ^/(?:\.|autotest|occ|issue|indie|db_|console) { return 404; }
+                location ~ \.php(?:$$|/) {
+                    rewrite ^/(?!index|remote|public|cron|core\/ajax\/update|status|ocs\/v[12]|updater\/.+|ocs-provider\/.+|.+\/richdocumentscode(_arm64)?\/proxy) /index.php$$request_uri;
+                    fastcgi_split_path_info ^(.+?\.php)(/.*)$$;
+                    set $$path_info $$fastcgi_path_info;
+                    try_files $$fastcgi_script_name =404;
+                    include fastcgi_params;
+                    fastcgi_param SCRIPT_FILENAME $$document_root$$fastcgi_script_name;
+                    fastcgi_param PATH_INFO $$path_info;
+                    fastcgi_param modHeadersAvailable true;
+                    fastcgi_param front_controller_active true;
+                    fastcgi_pass php-handler;
+                    fastcgi_intercept_errors on;
+                    fastcgi_request_buffering on;
+                    fastcgi_read_timeout 300;
+                    fastcgi_max_temp_file_size 0;
+                }
+                location ~ \.(?:css|js|mjs|svg|gif|ico|jpg|png|webp|wasm|tflite|map|ogg|flac|mp4|webm)$$ {
+                    try_files $$uri /index.php$$request_uri;
+                    add_header Cache-Control "public, max-age=15778463$$asset_immutable";
+                    add_header Referrer-Policy no-referrer always;
+                    add_header X-Content-Type-Options nosniff always;
+                    add_header X-Frame-Options SAMEORIGIN always;
+                    add_header X-Permitted-Cross-Domain-Policies none always;
+                    add_header X-Robots-Tag "noindex, nofollow" always;
+                    access_log off;
+                }
+                location ~ \.(otf|woff2?)$$ { try_files $$uri /index.php$$request_uri; expires 7d; access_log off; }
+                location /remote { return 301 /remote.php$$request_uri; }
+                location / { try_files $$uri $$uri/ /index.php$$request_uri; }
+            }
+        }
+        NGINX
+        chown 0:0 runtime-config/nginx/nginx-conf.next
+        chmod 0444 runtime-config/nginx/nginx-conf.next
+        mv runtime-config/nginx/nginx-conf.next runtime-config/nginx/nginx-conf
+        cat > runtime-config/cron/cron-sh.next <<'SH'
+        #!/bin/sh
+        set -eu
+        php occ background:cron
+        while :; do
+            started=$$(date +%s)
+            php -f /var/www/html/cron.php
+            touch /tmp/cron-ready
+            delay=$$((started + 300 - $$(date +%s)))
+            if [ "$$delay" -gt 0 ]; then
+                sleep "$$delay" &
+                wait "$$!"
+            fi
+        done
+        SH
+        chown 0:0 runtime-config/cron/cron-sh.next
+        chmod 0444 runtime-config/cron/cron-sh.next
+        mv runtime-config/cron/cron-sh.next runtime-config/cron/cron-sh
+        echo "Data directories and configuration files are ready."
+networks:
+  frontend: {}
+  database:
+    internal: true
+configs:
+  nextcloud-config:
+    content: |
+      <?php
+      $$CONFIG = ['log_rotate_size' => 10485760];

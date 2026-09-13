@@ -1,0 +1,8 @@
+probe:
+  path: /status.php
+  status: [200]
+  contains: '"installed":true'
+timeout: 600
+allow:
+  - text: vm.overcommit_memory
+    why: Redis warns on hosts without overcommit. Recorded in batch-a.md.

@@ -1,0 +1,236 @@
+services:
+  postgres:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${POSTGRES_IMAGE:-dhi.io/postgres:18.6-alpine3.24@sha256:d23585213fe835f109c6c74e68679c9c96fe6d3debe569b6c0fc89dc7f2977d0}
+    user: 70:70
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      PGDATA: /var/lib/postgresql/18/data
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: ${TZ}
+    volumes:
+    - ./postgres:/var/lib/postgresql
+    networks:
+    - database
+    tmpfs:
+    - /tmp:size=64M,mode=1777
+    - /run/postgresql:size=32M,uid=70,gid=70,mode=0755
+    stop_grace_period: 30s
+    mem_limit: 384m
+    pids_limit: 100
+    healthcheck:
+      test:
+      - CMD
+      - pg_isready
+      - -h
+      - 127.0.0.1
+      - -U
+      - postgres
+      - -d
+      - postgres
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+  database-init:
+    restart: 'no'
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${POSTGRES_IMAGE:-dhi.io/postgres:18.6-alpine3.24@sha256:d23585213fe835f109c6c74e68679c9c96fe6d3debe569b6c0fc89dc7f2977d0}
+    user: 70:70
+    tmpfs:
+    - /var/lib/postgresql:size=16M,uid=70,gid=70,mode=0700
+    read_only: true
+    entrypoint:
+    - psql
+    command:
+    - -h
+    - postgres
+    - -U
+    - postgres
+    - -d
+    - postgres
+    - -v
+    - ON_ERROR_STOP=1
+    - -f
+    - /init.sql
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGCONNECT_TIMEOUT: '10'
+      PGOPTIONS: -c statement_timeout=30000
+    networks:
+    - database
+    mem_limit: 64m
+    pids_limit: 32
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+    - type: bind
+      source: ./runtime-config/database-init/database-init
+      target: /init.sql
+      read_only: true
+      bind:
+        create_host_path: false
+  n8n:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${N8N_IMAGE:-docker.n8n.io/n8nio/n8n:2.21.4@sha256:e755a7ba60113bb5e3959e24999e810be1aeee25e267d9dfec3dcfcb3d14617c}
+    user: 1000:1000
+    read_only: true
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: n8n
+      DB_POSTGRESDB_PASSWORD: ${N8N_DB_PASSWORD}
+      N8N_HOST: ${N8N_HOST}
+      N8N_PORT: '5678'
+      N8N_PROTOCOL: ${N8N_PROTOCOL}
+      N8N_EDITOR_BASE_URL: ${SITE_URL}
+      WEBHOOK_URL: ${SITE_URL}
+      N8N_PROXY_HOPS: ${PROXY_HOPS}
+      N8N_SECURE_COOKIE: ${N8N_SECURE_COOKIE}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: 'true'
+      N8N_DIAGNOSTICS_ENABLED: 'false'
+      N8N_RUNNERS_MODE: external
+      N8N_RUNNERS_BROKER_LISTEN_ADDRESS: 0.0.0.0
+      N8N_RUNNERS_AUTH_TOKEN: ${N8N_RUNNERS_AUTH_TOKEN}
+      GENERIC_TIMEZONE: ${TZ}
+      TZ: ${TZ}
+      NODE_OPTIONS: --max-old-space-size=768
+    ports:
+    - 127.0.0.1:${PORT}:5678
+    volumes:
+    - ./data:/home/node/.n8n
+    networks:
+    - frontend
+    - database
+    - runners
+    tmpfs:
+    - /tmp:size=128M,mode=1777
+    - /home/node/.cache:size=128M,uid=1000,gid=1000,mode=0700
+    stop_grace_period: 60s
+    mem_limit: 1g
+    pids_limit: 200
+    depends_on:
+      database-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+      - CMD
+      - node
+      - -e
+      - 'fetch(''http://127.0.0.1:5678/healthz/readiness'', {signal: AbortSignal.timeout(4000)}).then(r => {if (!r.ok) process.exit(1)}).catch(()
+        => process.exit(1))'
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 120s
+  runner:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${RUNNERS_IMAGE:-n8nio/runners:2.21.4@sha256:146a3f5c2fc36a5471ad0a1ee2d94195f6b12df2a49c6b86bcb0f2de7e71176c}
+    user: 1000:1000
+    read_only: true
+    environment:
+      N8N_RUNNERS_TASK_BROKER_URI: http://n8n:5679
+      N8N_RUNNERS_AUTH_TOKEN: ${N8N_RUNNERS_AUTH_TOKEN}
+      GENERIC_TIMEZONE: ${TZ}
+      TZ: ${TZ}
+      NODE_OPTIONS: --max-old-space-size=384
+    networks:
+    - runners
+    tmpfs:
+    - /tmp:size=128M,mode=1777
+    stop_grace_period: 60s
+    mem_limit: 512m
+    pids_limit: 150
+    depends_on:
+      n8n:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - -q
+      - --spider
+      - http://127.0.0.1:5680/healthz
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+  prepare:
+    image: ${PREPARE_IMAGE:-dhi.io/busybox:1.37.0-alpine3.24@sha256:cf19544e3830bfd972cd1ab793be113129c61f214583648d590289eaa938ce5a}
+    profiles: [init]
+    restart: "no"
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 32m
+    pids_limit: 32
+    volumes: [.:/project]
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        cd /project
+        umask 077
+        mkdir -p postgres data runtime-config/database-init
+        chown -R 70:70 postgres
+        chmod 0700 postgres
+        chown -R 1000:1000 data
+        chmod 0700 data
+        chmod 0711 runtime-config runtime-config/database-init
+        cat > runtime-config/database-init/database-init.next <<'SQL'
+        SELECT 'CREATE ROLE n8n LOGIN PASSWORD ''${N8N_DB_PASSWORD}'''
+        WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'n8n') \gexec
+        SELECT 'CREATE DATABASE n8n OWNER n8n'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'n8n') \gexec
+        SQL
+        chown 70:70 runtime-config/database-init/database-init.next
+        chmod 0400 runtime-config/database-init/database-init.next
+        mv runtime-config/database-init/database-init.next runtime-config/database-init/database-init
+        echo "Data directories and configuration files are ready."
+networks:
+  frontend: {}
+  database:
+    internal: true
+  runners:
+    internal: true

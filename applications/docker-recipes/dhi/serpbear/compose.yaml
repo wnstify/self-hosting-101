@@ -1,0 +1,173 @@
+services:
+  serpbear:
+    image: ${SERPBEAR_IMAGE:-towfiqi/serpbear:3.1.0@sha256:31bc71dc02a7d4efe4170e76eefac8be06077fb03d8d215919b602032dde3c38}
+    user: 1001:1001
+    restart: unless-stopped
+    read_only: true
+    entrypoint:
+    - /bin/sh
+    - /start.sh
+    environment:
+      USER_NAME: ${SERPBEAR_USER}
+      PASSWORD: ${SERPBEAR_PASSWORD}
+      SECRET: ${SERPBEAR_SECRET}
+      APIKEY: ${SERPBEAR_APIKEY}
+      NEXT_PUBLIC_APP_URL: ${SITE_URL}
+      SESSION_DURATION: '24'
+      PORT: '3000'
+      TZ: ${TZ}
+    volumes:
+    - ./data:/app/data
+    - ./tmp:/tmp
+    - ./cache:/app/.next/cache
+    - type: bind
+      source: ./result.txt
+      target: /app/result.txt
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ./runtime-config/serpbear/health-js
+      target: /health.js
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ./runtime-config/serpbear/start-sh
+      target: /start.sh
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ./runtime-config/serpbear/server-js
+      target: /server.js
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ./runtime-config/serpbear/data-failed_queue-json
+      target: /defaults/failed_queue.json
+      read_only: true
+      bind:
+        create_host_path: false
+    ports:
+    - 127.0.0.1:${PORT}:3000
+    networks:
+    - frontend
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    mem_limit: 512m
+    pids_limit: 200
+    healthcheck:
+      test:
+      - CMD
+      - node
+      - /health.js
+      interval: 10s
+      timeout: 8s
+      retries: 12
+      start_period: 45s
+  prepare:
+    image: ${PREPARE_IMAGE:-busybox:1.37.0-musl@sha256:fc6dddc4c44b1bfe37f41cae8e67d1693828e8f42a91862816d7953e2c9d3f23}
+    profiles: [init]
+    restart: "no"
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 32m
+    pids_limit: 32
+    volumes: [.:/project]
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        cd /project
+        umask 077
+        mkdir -p data tmp cache
+        chown -R 1001:1001 data tmp cache
+        chmod 0700 data tmp cache
+        [ -e result.txt ] || : > result.txt
+        chown 1001:1001 result.txt
+        chmod 0600 result.txt
+        mkdir -p runtime-config/serpbear
+        chmod 0711 runtime-config/serpbear
+        cat > runtime-config/serpbear/health-js.next <<'RECIPEFILE'
+        const { readFileSync } = require('node:fs');
+
+        async function check() {
+            const response = await fetch('http://127.0.0.1:3000/api/domains', {
+                headers: { Authorization: `Bearer $${process.env.APIKEY}` },
+                signal: AbortSignal.timeout(5000),
+            });
+            const body = await response.json();
+            if (!response.ok || !Array.isArray(body.domains)) throw new Error('Database is not ready');
+            JSON.parse(readFileSync('/app/data/settings.json', 'utf8'));
+        }
+
+        check().catch(() => process.exit(1));
+        RECIPEFILE
+        chown 0:0 runtime-config/serpbear/health-js.next
+        chmod 0444 runtime-config/serpbear/health-js.next
+        mv runtime-config/serpbear/health-js.next runtime-config/serpbear/health-js
+        mkdir -p runtime-config/serpbear
+        chmod 0711 runtime-config/serpbear
+        cat > runtime-config/serpbear/start-sh.next <<'RECIPEFILE'
+        set -eu
+        umask 077
+        if [ ! -e /app/data/failed_queue.json ]; then
+            cp /defaults/failed_queue.json /app/data/failed_queue.json
+            chmod 600 /app/data/failed_queue.json
+        fi
+        # A fresh database gets its current schema from the application on first access.
+        if [ -s /app/data/database.sqlite ]; then
+            ./node_modules/.bin/sequelize-cli db:migrate --env production
+        fi
+        exec ./node_modules/.bin/concurrently --kill-others 'node /server.js' 'node cron.js'
+        RECIPEFILE
+        chown 0:0 runtime-config/serpbear/start-sh.next
+        chmod 0444 runtime-config/serpbear/start-sh.next
+        mv runtime-config/serpbear/start-sh.next runtime-config/serpbear/start-sh
+        mkdir -p runtime-config/serpbear
+        chmod 0711 runtime-config/serpbear
+        cat > runtime-config/serpbear/server-js.next <<'RECIPEFILE'
+        const http = require('node:http');
+        const NextServer = require('/app/node_modules/next/dist/server/next-server').default;
+        const { config } = require('/app/.next/required-server-files.json');
+
+        // The image's server.js freezes this value at build time.
+        config.serverRuntimeConfig.appURL = process.env.NEXT_PUBLIC_APP_URL;
+        const app = new NextServer({
+            hostname: '0.0.0.0', port: 3000, dir: '/app',
+            dev: false, customServer: false, conf: config,
+        });
+        const handler = app.getRequestHandler();
+        http.createServer((request, response) => {
+            handler(request, response).catch((error) => {
+                console.error(error);
+                response.statusCode = 500;
+                response.end('Internal server error');
+            });
+        }).listen(3000, '0.0.0.0');
+        RECIPEFILE
+        chown 0:0 runtime-config/serpbear/server-js.next
+        chmod 0444 runtime-config/serpbear/server-js.next
+        mv runtime-config/serpbear/server-js.next runtime-config/serpbear/server-js
+        mkdir -p runtime-config/serpbear
+        chmod 0711 runtime-config/serpbear
+        cat > runtime-config/serpbear/data-failed_queue-json.next <<'RECIPEFILE'
+        []
+        RECIPEFILE
+        chown 0:0 runtime-config/serpbear/data-failed_queue-json.next
+        chmod 0444 runtime-config/serpbear/data-failed_queue-json.next
+        mv runtime-config/serpbear/data-failed_queue-json.next runtime-config/serpbear/data-failed_queue-json
+        echo "Data directories and runtime configuration are ready."
+networks:
+  frontend: {}

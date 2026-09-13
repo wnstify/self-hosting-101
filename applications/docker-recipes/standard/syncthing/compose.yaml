@@ -1,0 +1,167 @@
+services:
+  syncthing-init:
+    image: ${SYNCTHING_IMAGE:-syncthing/syncthing:2.1.1@sha256:775c4aac486263ca8653055bba7d3061799281974b706695e17bc798da3f4e92}
+    user: 0:0
+    read_only: true
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    tmpfs:
+    - /tmp:size=64m
+    mem_limit: 256m
+    pids_limit: 100
+    environment:
+      TZ: ${TZ}
+      STHOMEDIR: /var/syncthing
+      STGUIADDRESS: http://0.0.0.0:8384
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    restart: 'no'
+    entrypoint:
+    - /bin/sh
+    - -ec
+    command:
+    - |
+      if [ ! -f /var/syncthing/.initialized ]; then
+        if [ ! -f /var/syncthing/config.xml ]; then
+          cp /run/initial-config.xml /var/syncthing/config.xml
+          chmod 600 /var/syncthing/config.xml
+        fi
+        syncthing generate --no-port-probing --gui-user "$$1" --gui-password=- < /run/gui-password
+        touch /var/syncthing/.initialized
+      fi
+    - sh
+    - ${ADMIN_USERNAME}
+    volumes:
+    - ./config:/var/syncthing
+    - type: bind
+      source: ./runtime-config/syncthing-init/gui-password
+      target: /run/gui-password
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ./runtime-config/syncthing-init/initial-config
+      target: /run/initial-config.xml
+      read_only: true
+      bind:
+        create_host_path: false
+    healthcheck:
+      disable: true
+  syncthing:
+    image: ${SYNCTHING_IMAGE:-syncthing/syncthing:2.1.1@sha256:775c4aac486263ca8653055bba7d3061799281974b706695e17bc798da3f4e92}
+    user: 0:0
+    read_only: true
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    tmpfs:
+    - /tmp:size=64m
+    mem_limit: 256m
+    pids_limit: 100
+    environment:
+      TZ: ${TZ}
+      STHOMEDIR: /var/syncthing
+      STGUIADDRESS: http://0.0.0.0:8384
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    restart: unless-stopped
+    entrypoint:
+    - /bin/syncthing
+    command:
+    - serve
+    - --no-browser
+    - --no-upgrade
+    depends_on:
+      syncthing-init:
+        condition: service_completed_successfully
+    volumes:
+    - ./config:/var/syncthing
+    - ./sync:/data
+    ports:
+    - 127.0.0.1:${PORT}:8384
+    - ${SYNC_PORT}:22000/tcp
+    - ${SYNC_PORT}:22000/udp
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - --fail
+      - --silent
+      - --show-error
+      - --max-time
+      - '3'
+      - http://127.0.0.1:8384/rest/noauth/health
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+  prepare:
+    image: ${PREPARE_IMAGE:-busybox:1.37.0-musl@sha256:fc6dddc4c44b1bfe37f41cae8e67d1693828e8f42a91862816d7953e2c9d3f23}
+    profiles: [init]
+    restart: "no"
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 32m
+    pids_limit: 32
+    volumes: [.:/project]
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        cd /project
+        umask 077
+        mkdir -p config sync
+        chown -R 0:0 config
+        chmod 0700 config
+        chown 0:0 sync
+        chmod 0700 sync
+        mkdir -p runtime-config/syncthing-init
+        chmod 0711 runtime-config/syncthing-init
+        cat > runtime-config/syncthing-init/gui-password.next <<'RECIPEFILE'
+        ${ADMIN_PASSWORD}
+        RECIPEFILE
+        grep -q '[^[:space:]]' runtime-config/syncthing-init/gui-password.next || { echo "Set ADMIN_PASSWORD in .env before running prepare; an empty password locks you out of the web UI." >&2; exit 1; }
+        chown 0:0 runtime-config/syncthing-init/gui-password.next
+        chmod 0600 runtime-config/syncthing-init/gui-password.next
+        mv runtime-config/syncthing-init/gui-password.next runtime-config/syncthing-init/gui-password
+        mkdir -p runtime-config/syncthing-init
+        chmod 0711 runtime-config/syncthing-init
+        cat > runtime-config/syncthing-init/initial-config.next <<'RECIPEFILE'
+        <configuration version="52">
+          <folder id="default" label="Sync" path="/data" type="sendreceive" rescanIntervalS="3600" fsWatcherEnabled="true" fsWatcherDelayS="10">
+            <minDiskFree unit="%">1</minDiskFree>
+          </folder>
+          <gui enabled="true" tls="false">
+            <address>0.0.0.0:8384</address>
+            <apikey>${API_KEY}</apikey>
+          </gui>
+          <options>
+            <listenAddress>default</listenAddress>
+            <localAnnounceEnabled>false</localAnnounceEnabled>
+            <natEnabled>false</natEnabled>
+            <urAccepted>-1</urAccepted>
+            <startBrowser>false</startBrowser>
+            <autoUpgradeIntervalH>0</autoUpgradeIntervalH>
+          </options>
+        </configuration>
+        RECIPEFILE
+        chown 0:0 runtime-config/syncthing-init/initial-config.next
+        chmod 0600 runtime-config/syncthing-init/initial-config.next
+        mv runtime-config/syncthing-init/initial-config.next runtime-config/syncthing-init/initial-config
+        echo "Data directories and runtime configuration are ready."
+networks:
+  default: {}

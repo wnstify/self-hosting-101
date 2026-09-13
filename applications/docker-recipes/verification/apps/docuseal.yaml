@@ -1,0 +1,6 @@
+probe:
+  path: /up
+  status: [200]
+timeout: 300
+values:
+  FORCE_SSL: ""

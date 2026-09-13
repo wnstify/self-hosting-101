@@ -29,7 +29,7 @@ You can type every command yourself, or hand a guide to an AI agent with the [st
 | 5 | Netbird on the host: route to the private subnet, SSH over the private network, public ports closed with the provider console as the way back in | Planned | Planned |
 | 6 | Pangolin connection: Newt in a container, first published app, Proxmox GUI behind Pangolin with access rules and CrowdSec | Planned | Planned |
 | 7 | Backups: destination, schedule, and a restore on camera | Planned | Planned |
-| 8 onward | Applications, one per episode, each assigned a tier before installation | Planned | Planned |
+| 8 onward | Applications, one per episode, each assigned a tier before installation, built on the [Compose recipes](applications/docker-recipes/README.md) | Planned | Planned |
 
 Somewhere in the middle, one episode where something breaks and gets recovered. A failed boot, a lost Pangolin VPS, or a wrong firewall rule.
 

@@ -1,0 +1,659 @@
+services:
+  postgres:
+    depends_on:
+      dependencies-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${POSTGRES_IMAGE:-dhi.io/postgres:18.6-alpine3.24@sha256:d23585213fe835f109c6c74e68679c9c96fe6d3debe569b6c0fc89dc7f2977d0}
+    user: ${POSTGRES_UID:-70}:${POSTGRES_GID:-70}
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/18/data
+      TZ: ${TZ:-UTC}
+    volumes:
+    - ./postgres:/var/lib/postgresql
+    - type: bind
+      source: ./dictionaries/en_us.dict
+      target: /usr/share/postgresql18/tsearch_data/en_us.dict
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ./dictionaries/en_us.affix
+      target: /usr/share/postgresql18/tsearch_data/en_us.affix
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ./dictionaries/zulip_english.stop
+      target: /usr/share/postgresql18/tsearch_data/zulip_english.stop
+      read_only: true
+      bind:
+        create_host_path: false
+    tmpfs:
+    - /tmp:size=64M,mode=1777
+    - /run/postgresql:size=32M,uid=${POSTGRES_UID:-70},gid=${POSTGRES_GID:-70},mode=0755
+    networks:
+    - backend
+    mem_limit: 384m
+    pids_limit: 100
+    healthcheck:
+      test:
+      - CMD
+      - pg_isready
+      - -h
+      - 127.0.0.1
+      - -U
+      - postgres
+      - -d
+      - postgres
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+  dependencies-init:
+    image: ${ZULIP_IMAGE:-ghcr.io/zulip/zulip-server:12.2-0@sha256:765f0ab3caa49041989132ee1879d98dbab1df7695c27e713eac1f114d167755}
+    restart: 'no'
+    user: '1000:1000'
+    read_only: true
+    entrypoint: [python3, /prepare-dependencies.py]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    pids_limit: 32
+    tmpfs: ["/tmp:size=32m,mode=1777"]
+    networks: [frontend]
+    volumes:
+    - ./dictionaries:/dictionaries
+    - ./python-overrides:/python-overrides
+    - type: bind
+      source: ./runtime-config/dependencies-init/prepare-dependencies
+      target: /prepare-dependencies.py
+      read_only: true
+      bind:
+        create_host_path: false
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  database-init:
+    restart: 'no'
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${POSTGRES_IMAGE:-dhi.io/postgres:18.6-alpine3.24@sha256:d23585213fe835f109c6c74e68679c9c96fe6d3debe569b6c0fc89dc7f2977d0}
+    user: ${POSTGRES_UID:-70}:${POSTGRES_GID:-70}
+    read_only: true
+    entrypoint:
+    - psql
+    command:
+    - -h
+    - postgres
+    - -U
+    - postgres
+    - -d
+    - postgres
+    - -v
+    - ON_ERROR_STOP=1
+    - -f
+    - /init.sql
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGCONNECT_TIMEOUT: '10'
+      TZ: ${TZ:-UTC}
+    networks:
+    - backend
+    mem_limit: 64m
+    pids_limit: 32
+    depends_on:
+      postgres:
+        condition: service_healthy
+    tmpfs:
+    - /var/lib/postgresql:size=1m,uid=${POSTGRES_UID:-70},gid=${POSTGRES_GID:-70},mode=0700
+    volumes:
+    - type: bind
+      source: ./runtime-config/database-init/config-init-sql
+      target: /init.sql
+      read_only: true
+      bind:
+        create_host_path: false
+  memcached:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${MEMCACHED_IMAGE:-dhi.io/memcached:1.6.42-alpine3.24@sha256:bf97099f92e35dc2f19357ed111f107c17b7b52ac24ca07d2b0d4aa47bc89d19}
+    hostname: memcached
+    user: 11211:11211
+    read_only: true
+    command:
+    - -S
+    - -m
+    - '64'
+    - -t
+    - '2'
+    - -I
+    - 4m
+    environment:
+      SASL_CONF_PATH: /etc/memcached.conf
+      MEMCACHED_SASL_PWDB: /etc/memcached-sasl-db
+      TZ: ${TZ:-UTC}
+    networks:
+    - backend
+    mem_limit: 128m
+    pids_limit: 32
+    volumes:
+    - ./runtime-checks:/checks:ro
+    - type: bind
+      source: ./runtime-config/memcached/config-memcached-conf
+      target: /etc/memcached.conf
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ./runtime-config/memcached/config-memcached-sasl-db
+      target: /etc/memcached-sasl-db
+      read_only: true
+      bind:
+        create_host_path: false
+    healthcheck:
+      test: ["CMD", "/checks/ld-musl.so.1", "/checks/busybox", "nc", "-z", "-w", "3", "127.0.0.1", "11211"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 60s
+  rabbitmq:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${RABBITMQ_IMAGE:-dhi.io/rabbitmq:4.2.6-debian13@sha256:d63959dff2692e93ffe464bd3777b10c079ba385522f5b975cce3e7754572f30}
+    hostname: rabbitmq
+    user: ${RABBITMQ_UID:-65532}:${RABBITMQ_GID:-65532}
+    environment:
+      HOME: /var/lib/rabbitmq
+      RABBITMQ_DEFAULT_USER: zulip
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: +S 2:2 +A 4
+      TZ: ${TZ:-UTC}
+    volumes:
+    - ./rabbitmq:/var/lib/rabbitmq
+    tmpfs:
+    - /tmp:size=64M,mode=1777
+    networks:
+    - backend
+    mem_limit: 384m
+    pids_limit: 128
+    healthcheck:
+      test:
+      - CMD
+      - rabbitmq-diagnostics
+      - -q
+      - ping
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 60s
+  redis:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${REDIS_IMAGE:-dhi.io/redis:8.6.6-alpine3.24@sha256:cb9af3bcc8ef8bba975242aba5a96d3307977380e1ef687b66aa9ff86477818d}
+    user: ${REDIS_UID:-65532}:${REDIS_GID:-65532}
+    read_only: true
+    command:
+    - redis-server
+    - /etc/redis/redis.conf
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+      TZ: ${TZ:-UTC}
+    volumes:
+    - ./redis:/data
+    - type: bind
+      source: ./runtime-config/redis/config-redis-conf
+      target: /etc/redis/redis.conf
+      read_only: true
+      bind:
+        create_host_path: false
+    networks:
+    - backend
+    mem_limit: 128m
+    pids_limit: 32
+    healthcheck:
+      test:
+      - CMD
+      - redis-cli
+      - -e
+      - ping
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+  zulip:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${ZULIP_IMAGE:-ghcr.io/zulip/zulip-server:12.2-0@sha256:765f0ab3caa49041989132ee1879d98dbab1df7695c27e713eac1f114d167755}
+    cap_add:
+    - CHOWN
+    - SETUID
+    - SETGID
+    - DAC_OVERRIDE
+    - FOWNER
+    - NET_BIND_SERVICE
+    - KILL
+    environment:
+      SECRETS_postgres_password: ${ZULIP_DB_PASSWORD}
+      SECRETS_memcached_password: ${MEMCACHED_PASSWORD}
+      SECRETS_rabbitmq_password: ${RABBITMQ_PASSWORD}
+      SECRETS_redis_password: ${REDIS_PASSWORD}
+      SECRETS_secret_key: ${ZULIP_SECRET_KEY}
+      SECRETS_email_password: ${SMTP_PASSWORD:-}
+      SETTING_REMOTE_POSTGRES_HOST: postgres
+      SETTING_MEMCACHED_LOCATION: memcached:11211
+      SETTING_RABBITMQ_HOST: rabbitmq
+      SETTING_REDIS_HOST: redis
+      PYTHONPATH: /python-overrides/pika-1.4.4-py3-none-any.whl
+      ZULIP_CUSTOM_SETTINGS: exec(open('/config/settings.py').read())
+      LINK_SETTINGS_TO_DATA: 'True'
+      TRUST_GATEWAY_IP: 'True'
+      AUTO_BACKUP_ENABLED: 'False'
+      CONFIG_application_server__queue_workers_multiprocess: 'True'
+      CONFIG_application_server__uwsgi_processes: '2'
+      CONFIG_application_server__nginx_worker_processes: '1'
+      TZ: ${TZ:-UTC}
+      SITE_URL: ${SITE_URL}
+      FAKE_EMAIL_DOMAIN: ${FAKE_EMAIL_DOMAIN:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_NAME: ${ADMIN_NAME}
+      ORGANIZATION_NAME: ${ORGANIZATION_NAME}
+      SMTP_MODE: ${SMTP_MODE}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_SECURITY: ${SMTP_SECURITY}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_FROM: ${SMTP_FROM}
+      CERTIFICATES: ''
+      ZULIP_RUN_POST_SETUP_SCRIPTS: 'True'
+    volumes:
+    - ./data:/data
+    - ./python-overrides:/python-overrides:ro
+    - ./logs:/var/log/zulip
+    ports:
+    - 127.0.0.1:${PORT}:80
+    tmpfs:
+    - /tmp:size=256M,mode=1777
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    networks:
+    - frontend
+    - backend
+    mem_limit: 3g
+    pids_limit: 256
+    depends_on:
+      database-init:
+        condition: service_completed_successfully
+      memcached:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD
+      - python3
+      - /config/health.py
+      interval: 15s
+      timeout: 15s
+      retries: 20
+      start_period: 300s
+    entrypoint:
+    - /bin/bash
+    - -ec
+    command:
+    - |
+      mkdir -p /data/post-setup.d
+      cp /config/bootstrap-hook.sh /data/post-setup.d/10-bootstrap.sh
+      chmod 755 /data/post-setup.d/10-bootstrap.sh
+      exec /sbin/entrypoint.sh app:run
+    configs:
+    - source: settings
+      target: /config/settings.py
+      uid: '0'
+      gid: '0'
+      mode: 420
+    - source: supervisor-auth
+      target: /config/supervisor-auth.py
+      uid: '0'
+      gid: '0'
+      mode: 420
+    - source: bootstrap
+      target: /config/bootstrap.py
+      uid: '0'
+      gid: '0'
+      mode: 420
+    - source: admin-password
+      target: /config/admin-password
+      uid: '1000'
+      gid: '1000'
+      mode: 256
+    - source: bootstrap-hook
+      target: /config/bootstrap-hook.sh
+      uid: '0'
+      gid: '0'
+      mode: 420
+    - source: health
+      target: /config/health.py
+      uid: '0'
+      gid: '0'
+      mode: 420
+  # Compose cannot mount an inline config into a read-only service, so prepare writes the files itself.
+  prepare:
+    image: ${PREPARE_IMAGE:-dhi.io/busybox:1.37.0-alpine3.24@sha256:cf19544e3830bfd972cd1ab793be113129c61f214583648d590289eaa938ce5a}
+    profiles: [init]
+    restart: "no"
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 32m
+    pids_limit: 32
+    volumes: [.:/project]
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        cd /project
+        mkdir -p runtime-checks
+        chmod 0755 runtime-checks
+        cp /bin/busybox runtime-checks/busybox
+        chmod 0555 runtime-checks/busybox
+        cp /lib/ld-musl-*.so.1 runtime-checks/ld-musl.so.1
+        chmod 0555 runtime-checks/ld-musl.so.1
+        umask 077
+        mkdir -p dictionaries python-overrides runtime-config/dependencies-init
+        chown 1000:1000 dictionaries python-overrides
+        chmod 0755 dictionaries python-overrides runtime-config/dependencies-init
+        # Bind sources must exist when Compose creates PostgreSQL, before dependencies-init runs.
+        for name in en_us.dict en_us.affix zulip_english.stop; do
+          [ -f dictionaries/$$name ] || : > dictionaries/$$name
+          chmod 0444 dictionaries/$$name
+        done
+        cat >runtime-config/dependencies-init/prepare-dependencies.next <<'DICTIONARIES'
+        import hashlib
+        import os
+        from pathlib import Path
+        import subprocess
+        import tempfile
+        import urllib.request
+
+        # Pika 1.4.0 in this app image fails while closing active consumers.
+        wheel = Path('/python-overrides/pika-1.4.4-py3-none-any.whl')
+        wheel_hash = '48de960c97a93b55db06b8be4c53eb977c9c8a2754c57cdae9097abcbd70ce04'
+        if not wheel.exists() or hashlib.sha256(wheel.read_bytes()).hexdigest() != wheel_hash:
+            wheel_url = 'https://files.pythonhosted.org/packages/7c/f3/921170b78779ac3f8b405cb28fce88acca1562ac114072cbf0a115e19bb9/pika-1.4.4-py3-none-any.whl'
+            with urllib.request.urlopen(wheel_url, timeout=60) as response:
+                archive = response.read()
+            if hashlib.sha256(archive).hexdigest() != wheel_hash:
+                raise RuntimeError('Pika wheel checksum does not match the pinned source')
+            pending = wheel.with_suffix('.next')
+            pending.unlink(missing_ok=True)
+            pending.write_bytes(archive)
+            pending.chmod(0o444)
+            os.replace(pending, wheel)
+
+        url = 'https://deb.debian.org/debian/pool/main/s/scowl/hunspell-en-us_2020.12.07-4_all.deb'
+        expected = '962d774fd74f94ea8e781291319706fc5172d7d02c806e4c3a0c6af3ec9ccdc7'
+        target = Path('/dictionaries')
+        source = Path('/home/zulip/deployments/current')
+        stopwords = source / 'puppet/zulip/files/postgresql/zulip_english.stop'
+        stamp = expected + ':' + hashlib.sha256(stopwords.read_bytes()).hexdigest()
+        marker = target / '.source'
+        files = ('en_us.dict', 'en_us.affix', 'zulip_english.stop', 'COPYRIGHT', 'ZULIP-LICENSE')
+        if marker.exists() and marker.read_text() == stamp and all((target / name).is_file() and (target / name).stat().st_size for name in files):
+            print('PostgreSQL search dictionaries are already ready.')
+            raise SystemExit(0)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary = Path(temporary)
+            with urllib.request.urlopen(url, timeout=60) as response:
+                archive = response.read()
+            if hashlib.sha256(archive).hexdigest() != expected:
+                raise RuntimeError('Dictionary package checksum does not match the pinned source')
+            package = temporary / 'dictionary.deb'
+            package.write_bytes(archive)
+            unpacked = temporary / 'unpacked'
+            subprocess.run(['dpkg-deb', '-x', str(package), str(unpacked)], check=True)
+            contents = {
+                'en_us.dict': unpacked / 'usr/share/hunspell/en_US.dic',
+                'en_us.affix': unpacked / 'usr/share/hunspell/en_US.aff',
+                'COPYRIGHT': unpacked / 'usr/share/doc/hunspell-en-us/copyright',
+                'zulip_english.stop': stopwords,
+                'ZULIP-LICENSE': source / 'LICENSE',
+            }
+            for name, path in contents.items():
+                pending = target / (name + '.next')
+                pending.unlink(missing_ok=True)
+                pending.write_bytes(path.read_bytes())
+                pending.chmod(0o444)
+                os.replace(pending, target / name)
+        pending = target / '.source.next'
+        pending.unlink(missing_ok=True)
+        pending.write_text(stamp)
+        os.replace(pending, marker)
+        print('PostgreSQL search dictionaries are ready.')
+        DICTIONARIES
+        chmod 0444 runtime-config/dependencies-init/prepare-dependencies.next
+        mv runtime-config/dependencies-init/prepare-dependencies.next runtime-config/dependencies-init/prepare-dependencies
+        mkdir -p postgres redis rabbitmq data logs runtime-config/database-init runtime-config/memcached runtime-config/redis
+        chown -R ${POSTGRES_UID:-70}:${POSTGRES_GID:-70} postgres
+        chmod 0700 postgres
+        chown -R ${REDIS_UID:-65532}:${REDIS_GID:-65532} redis
+        chmod 0750 redis
+        chown -R ${RABBITMQ_UID:-65532}:${RABBITMQ_GID:-65532} rabbitmq
+        chmod 0700 rabbitmq
+        chown -R 1000:1000 data logs
+        chmod 0750 data logs
+        chmod 0711 runtime-config/database-init runtime-config/memcached runtime-config/redis
+        cat >runtime-config/database-init/config-init-sql.next <<'SQL'
+        SELECT 'CREATE ROLE zulip LOGIN PASSWORD ''${ZULIP_DB_PASSWORD}'''
+        WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'zulip') \gexec
+        SELECT 'CREATE DATABASE zulip OWNER zulip'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'zulip') \gexec
+        \connect zulip
+        CREATE SCHEMA IF NOT EXISTS zulip AUTHORIZATION zulip;
+        SQL
+        chown ${POSTGRES_UID:-70}:${POSTGRES_GID:-70} runtime-config/database-init/config-init-sql.next
+        chmod 0400 runtime-config/database-init/config-init-sql.next
+        mv runtime-config/database-init/config-init-sql.next runtime-config/database-init/config-init-sql
+        cat >runtime-config/memcached/config-memcached-conf.next <<'CONF'
+        mech_list: plain
+        CONF
+        cat >runtime-config/memcached/config-memcached-sasl-db.next <<'SASL'
+        zulip@memcached:${MEMCACHED_PASSWORD}
+        zulip@localhost:${MEMCACHED_PASSWORD}
+        SASL
+        for name in config-memcached-conf config-memcached-sasl-db; do
+          chown 11211:11211 runtime-config/memcached/$$name.next
+          chmod 0400 runtime-config/memcached/$$name.next
+          mv runtime-config/memcached/$$name.next runtime-config/memcached/$$name
+        done
+        cat >runtime-config/redis/config-redis-conf.next <<'REDISCONF'
+        bind 0.0.0.0
+        protected-mode yes
+        requirepass ${REDIS_PASSWORD}
+        dir /data
+        appendonly yes
+        maxmemory 96mb
+        maxmemory-policy noeviction
+        REDISCONF
+        chown ${REDIS_UID:-65532}:${REDIS_GID:-65532} runtime-config/redis/config-redis-conf.next
+        chmod 0400 runtime-config/redis/config-redis-conf.next
+        mv runtime-config/redis/config-redis-conf.next runtime-config/redis/config-redis-conf
+        echo "Data directories and configuration files are ready."
+networks:
+  frontend: {}
+  backend:
+    internal: true
+configs:
+  settings:
+    content: |
+      import os
+      from urllib.parse import urlsplit
+      import sys
+
+      # manage.py activates its venv before reading these settings.
+      sys.path.insert(0, '/python-overrides/pika-1.4.4-py3-none-any.whl')
+      site = urlsplit(os.environ['SITE_URL'])
+      EXTERNAL_HOST = site.netloc
+      if os.environ.get('FAKE_EMAIL_DOMAIN'):
+          FAKE_EMAIL_DOMAIN = os.environ['FAKE_EMAIL_DOMAIN']
+      ZULIP_ADMINISTRATOR = os.environ['ADMIN_EMAIL']
+      USING_PGROONGA = False
+      REMOTE_POSTGRES_HOST = 'postgres'
+      MEMCACHED_LOCATION = 'memcached:11211'
+      RABBITMQ_HOST = 'rabbitmq'
+      REDIS_HOST = 'redis'
+      ZULIP_SERVICE_PUSH_NOTIFICATIONS = False
+      ZULIP_SERVICE_SUBMIT_USAGE_STATISTICS = False
+      if os.environ['SMTP_MODE'] == 'smtp':
+          EMAIL_HOST = os.environ['SMTP_HOST']
+          EMAIL_PORT = int(os.environ['SMTP_PORT'])
+          EMAIL_HOST_USER = os.environ['SMTP_USER']
+          NOREPLY_EMAIL_ADDRESS = os.environ['SMTP_FROM']
+          EMAIL_USE_TLS = os.environ['SMTP_SECURITY'] == 'starttls'
+          EMAIL_USE_SSL = os.environ['SMTP_SECURITY'] == 'tls'
+      else:
+          EMAIL_BACKEND = 'django.core.mail.backends.dummy.EmailBackend'
+  supervisor-auth:
+    content: |
+      import configparser
+      import hashlib
+      import os
+      from pathlib import Path
+
+      path = Path('/etc/supervisor/supervisord.conf')
+      config = configparser.RawConfigParser()
+      config.read(path)
+      password = hashlib.sha256(('supervisor:' + os.environ['SECRETS_secret_key']).encode()).hexdigest()
+      config.set('unix_http_server', 'username', 'zulip')
+      config.set('unix_http_server', 'password', '{SHA}' + hashlib.sha1(password.encode()).hexdigest())
+      config.set('supervisorctl', 'username', 'zulip')
+      config.set('supervisorctl', 'password', password)
+      with path.open('w') as output:
+          config.write(output)
+      os.chown(path, 0, 1000)
+      path.chmod(0o640)
+  bootstrap:
+    content: |
+      import os
+      from pathlib import Path
+      from django.core.management import call_command
+      from zerver.models import Realm, UserProfile
+
+      account = dict(email=os.environ['ADMIN_EMAIL'], name=os.environ['ADMIN_NAME'], organization=os.environ['ORGANIZATION_NAME'])
+      realm = Realm.objects.filter(string_id='').first()
+      if realm is None:
+          call_command('create_realm', account['organization'], email=account['email'],
+                       full_name=account['name'], password_file='/config/admin-password')
+          realm = Realm.objects.get(string_id='')
+      owner = UserProfile.objects.get(realm=realm, delivery_email__iexact=account['email'])
+      if owner.role != UserProfile.ROLE_REALM_OWNER or not owner.is_active:
+          raise RuntimeError('The initial administrator is not an active organization owner')
+      Path('/data/account-ready').write_text('ready\n')
+  admin-password:
+    content: |
+      ${ADMIN_PASSWORD}
+  bootstrap-hook:
+    content: |
+      #!/bin/bash
+      set -e
+      python3 /config/supervisor-auth.py
+      exec su zulip -s /bin/bash -c "/home/zulip/deployments/current/manage.py shell -c \"exec(open('/config/bootstrap.py').read())\""
+  health:
+    content: |
+      import os
+      import socket
+      import struct
+      import subprocess
+      import urllib.request
+
+      urllib.request.urlopen('http://127.0.0.1/health', timeout=4).close()
+      status = subprocess.check_output(['supervisorctl', 'status'], text=True, timeout=5)
+      if not status.strip() or any('RUNNING' not in line for line in status.splitlines()):
+          raise RuntimeError('A supervised Zulip process is not running')
+      key = b'PLAIN'
+      value = b'\0zulip\0' + os.environ['SECRETS_memcached_password'].encode()
+      with socket.create_connection(('memcached', 11211), timeout=4) as client:
+          client.sendall(struct.pack('!BBHBBHIIQ', 0x80, 0x21, len(key), 0, 0, 0, len(key + value), 1, 0) + key + value)
+          header = client.makefile('rb').read(24)
+          if len(header) != 24 or struct.unpack('!BBHBBHIIQ', header)[5] != 0:
+              raise RuntimeError('Memcached SASL authentication failed')
+
+      import sys
+      sys.path.insert(0, '/python-overrides/pika-1.4.4-py3-none-any.whl')
+      import pika
+
+      credentials = pika.PlainCredentials('zulip', os.environ['SECRETS_rabbitmq_password'])
+      parameters = pika.ConnectionParameters('rabbitmq', credentials=credentials, socket_timeout=3, stack_timeout=5)
+      with pika.BlockingConnection(parameters) as connection:
+          channel = connection.channel()
+          queues = [line.split()[0].split(':')[-1].removeprefix('zulip_events_')
+                    for line in status.splitlines() if 'zulip_events_' in line]
+          if not queues:
+              raise RuntimeError('No queue workers are configured')
+          for queue in queues + ['notify_tornado']:
+              if channel.queue_declare(queue=queue, durable=True).method.consumer_count < 1:
+                  raise RuntimeError('Queue worker is not consuming: ' + queue)
+
+      from pathlib import Path
+      if not Path('/data/account-ready').is_file():
+          raise RuntimeError('Initial organization setup has not completed')

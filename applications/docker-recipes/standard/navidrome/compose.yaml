@@ -1,0 +1,67 @@
+services:
+  navidrome:
+    image: ${NAVIDROME_IMAGE:-deluan/navidrome:0.63.2@sha256:9012939114fbb1bb641b81cf96dec5ded15f0aafefe8d47a511d7cb919658e40}
+    user: '1000:0'
+    restart: unless-stopped
+    read_only: true
+    environment:
+      TZ: ${TZ}
+      ND_MUSICFOLDER: /music
+      ND_DATAFOLDER: /data
+      ND_SCANNER_SCHEDULE: '@every 1h'
+      ND_SESSIONTIMEOUT: 24h
+    volumes:
+    - ./data:/data
+    - ./music:/music:ro
+    - ./tmp:/tmp
+    ports:
+    - 127.0.0.1:${PORT}:4533
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    mem_limit: 256m
+    pids_limit: 200
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - --quiet
+      - --tries=1
+      - --spider
+      - http://127.0.0.1:4533/ping
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  prepare:
+    image: ${PREPARE_IMAGE:-busybox:1.37.0-musl@sha256:fc6dddc4c44b1bfe37f41cae8e67d1693828e8f42a91862816d7953e2c9d3f23}
+    profiles: [init]
+    restart: "no"
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 32m
+    pids_limit: 32
+    volumes: [.:/project]
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        cd /project
+        mkdir -p data tmp music
+        chown -R 1000:0 data tmp
+        chmod 0770 data tmp
+        chown 0:0 music
+        chmod 0750 music
+        echo "Data directories are ready."
+networks:
+  default: {}

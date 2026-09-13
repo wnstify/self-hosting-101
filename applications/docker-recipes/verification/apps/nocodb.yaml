@@ -1,0 +1,5 @@
+probe:
+  path: /api/v1/health
+  status: [200]
+timeout: 600
+allow: []

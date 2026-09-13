@@ -1,0 +1,5 @@
+probe:
+  path: /ping
+  status: [200]
+timeout: 300
+allow: []

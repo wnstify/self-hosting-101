@@ -17,7 +17,7 @@ This repository goes with my YouTube series on secure self-hosting. Each video g
 | [Infrastructure](infrastructure/README.md) | Servers, virtualization, storage, container hosts | [Proxmox on bare metal](infrastructure/proxmox-hetzner/README.md) |
 | [Networking](networking/README.md) | DNS, routing, private networks, reverse proxies, TLS | Planned |
 | [Security](security/README.md) | SSH, firewalls, access control, MFA, secrets | Planned |
-| [Applications](applications/README.md) | Installation and maintenance of individual apps | Planned |
+| [Applications](applications/README.md) | Installation and maintenance of individual apps | Planned. [Compose recipes](applications/docker-recipes/README.md) exist without a guide |
 | [Backups](backups/README.md) | Backup storage, retention, restore tests, disaster recovery | Planned |
 | [Operations](operations/README.md) | Monitoring, alerts, logs, updates, troubleshooting | Planned |
 

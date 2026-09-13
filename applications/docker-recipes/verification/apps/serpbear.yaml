@@ -1,0 +1,11 @@
+probe:
+  path: /login
+  status: [200]
+timeout: 300
+values:
+  SERPBEAR_PASSWORD: generate
+  SERPBEAR_SECRET: generate
+  SERPBEAR_APIKEY: generate
+allow:
+  - text: DEP0040
+    why: Node punycode deprecation warning. Recorded in batch-c.md.

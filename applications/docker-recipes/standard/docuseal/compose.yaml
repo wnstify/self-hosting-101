@@ -1,0 +1,297 @@
+services:
+  postgres:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${POSTGRES_IMAGE:-postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2}
+    user: 70:70
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      PGDATA: /var/lib/postgresql/18/data
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: ${TZ}
+    volumes:
+    - ./postgres:/var/lib/postgresql
+    networks:
+    - database
+    tmpfs:
+    - /tmp:size=64M,mode=1777
+    - /run/postgresql:size=32M,uid=70,gid=70,mode=0755
+    stop_grace_period: 30s
+    mem_limit: 384m
+    pids_limit: 100
+    healthcheck:
+      test:
+      - CMD
+      - pg_isready
+      - -h
+      - 127.0.0.1
+      - -U
+      - postgres
+      - -d
+      - postgres
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+  database-init:
+    restart: 'no'
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${POSTGRES_IMAGE:-postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2}
+    user: 70:70
+    tmpfs:
+    - /var/lib/postgresql:size=16M,uid=70,gid=70,mode=0700
+    read_only: true
+    entrypoint:
+    - psql
+    command:
+    - -h
+    - postgres
+    - -U
+    - postgres
+    - -d
+    - postgres
+    - -v
+    - ON_ERROR_STOP=1
+    - -f
+    - /init.sql
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGCONNECT_TIMEOUT: '10'
+      PGOPTIONS: -c statement_timeout=30000
+      PGDATA: /var/lib/postgresql/18/data
+    networks:
+    - database
+    mem_limit: 64m
+    pids_limit: 32
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+    - type: bind
+      source: ./runtime-config/database-init/database-init
+      target: /init.sql
+      read_only: true
+      bind:
+        create_host_path: false
+  redis:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${REDIS_IMAGE:-redis:8.6.6-alpine@sha256:75934ddb37bfaebe3b4082ba673cac39f66495244134f33dd0a502ce03cdcd36}
+    user: ${REDIS_UID:-999}:${REDIS_GID:-1000}
+    read_only: true
+    command:
+    - redis-server
+    - /etc/redis/redis.conf
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    volumes:
+    - ./redis:/data
+    - type: bind
+      source: ./runtime-config/redis/redis-config
+      target: /etc/redis/redis.conf
+      read_only: true
+      bind:
+        create_host_path: false
+    networks:
+    - cache
+    mem_limit: 256m
+    pids_limit: 64
+    healthcheck:
+      test:
+      - CMD
+      - redis-cli
+      - -e
+      - ping
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+  schema-init:
+    image: ${DOCUSEAL_IMAGE:-docuseal/docuseal:3.2.3@sha256:209b1ef44d4bc0246188c3e81fbba706c4788dfd11012a5a2c9a9b06e00a586b}
+    restart: 'no'
+    user: 2000:2000
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    environment:
+      DATABASE_URL: postgresql://docuseal:${DOCUSEAL_DB_PASSWORD}@postgres:5432/docuseal
+      BUNDLE_GEMFILE: /app/Gemfile
+    networks: [database]
+    mem_limit: 128m
+    pids_limit: 32
+    depends_on:
+      database-init:
+        condition: service_completed_successfully
+    # Run the pinned image's base migrations before its storage initializer queries encrypted_configs.
+    command:
+    - /app/bin/bundle
+    - exec
+    - ruby
+    - -r
+    - active_record
+    - -e
+    - |
+      ActiveRecord::Base.establish_connection(ENV.fetch('DATABASE_URL'))
+      ActiveRecord::MigrationContext.new('/app/db/migrate').up(20230515193039)
+  docuseal:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${DOCUSEAL_IMAGE:-docuseal/docuseal:3.2.3@sha256:209b1ef44d4bc0246188c3e81fbba706c4788dfd11012a5a2c9a9b06e00a586b}
+    user: 2000:2000
+    read_only: true
+    environment:
+      DATABASE_URL: postgresql://docuseal:${DOCUSEAL_DB_PASSWORD}@postgres:5432/docuseal
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      APP_URL: ${SITE_URL}
+      FORCE_SSL: ${FORCE_SSL}
+      HOME: /data/docuseal
+      RAILS_MAX_THREADS: '5'
+      SIDEKIQ_THREADS: '3'
+      TZ: ${TZ}
+    volumes:
+    - ./data:/data/docuseal
+    - ./tmp:/tmp
+    - ./cache:/app/tmp/cache
+    - type: bind
+      source: ./runtime-config/docuseal/docuseal-health
+      target: /health.rb
+      read_only: true
+      bind:
+        create_host_path: false
+    ports:
+    - 127.0.0.1:${PORT}:3000
+    networks:
+    - frontend
+    - database
+    - cache
+    mem_limit: 1g
+    pids_limit: 128
+    stop_grace_period: 30s
+    depends_on:
+      schema-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD
+      - ruby
+      - /health.rb
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 120s
+  prepare:
+    image: ${PREPARE_IMAGE:-busybox:1.37.0-musl@sha256:fc6dddc4c44b1bfe37f41cae8e67d1693828e8f42a91862816d7953e2c9d3f23}
+    profiles: [init]
+    restart: "no"
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 32m
+    pids_limit: 32
+    volumes: [.:/project]
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        cd /project
+        mkdir -p postgres redis data tmp cache
+        chown -R 70:70 postgres
+        chmod 0700 postgres
+        chown -R ${REDIS_UID:-999}:${REDIS_GID:-1000} redis
+        chmod 0750 redis
+        chown -R 2000:2000 data tmp cache
+        chmod 0750 data
+        chmod 0700 tmp cache
+        umask 077
+        mkdir -p runtime-config/database-init runtime-config/docuseal runtime-config/redis
+        chmod 0711 runtime-config runtime-config/database-init runtime-config/docuseal runtime-config/redis
+        cat >runtime-config/database-init/database-init.next <<'EOFCONF'
+        SELECT 'CREATE ROLE docuseal LOGIN PASSWORD ''${DOCUSEAL_DB_PASSWORD}'''
+        WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'docuseal') \gexec
+        SELECT 'CREATE DATABASE docuseal OWNER docuseal'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'docuseal') \gexec
+        EOFCONF
+        chown 70:70 runtime-config/database-init/database-init.next
+        chmod 0400 runtime-config/database-init/database-init.next
+        mv runtime-config/database-init/database-init.next runtime-config/database-init/database-init
+        cat >runtime-config/redis/redis-config.next <<'EOFCONF'
+        bind 0.0.0.0
+        protected-mode yes
+        requirepass ${REDIS_PASSWORD}
+        dir /data
+        appendonly yes
+        maxmemory 192mb
+        maxmemory-policy noeviction
+        EOFCONF
+        chown ${REDIS_UID:-999}:${REDIS_GID:-1000} runtime-config/redis/redis-config.next
+        chmod 0400 runtime-config/redis/redis-config.next
+        mv runtime-config/redis/redis-config.next runtime-config/redis/redis-config
+        cat >runtime-config/docuseal/docuseal-health.next <<'EOFCONF'
+        require 'net/http'
+        require 'redis_client'
+
+        http = Net::HTTP.new('127.0.0.1', 3000)
+        http.open_timeout = 3
+        http.read_timeout = 3
+        abort 'HTTP health check failed' unless http.get('/up').is_a?(Net::HTTPSuccess)
+
+        redis = RedisClient.config(url: ENV.fetch('REDIS_URL'), timeout: 3).new_client
+        ready = redis.call('SMEMBERS', 'processes').any? do |process|
+          redis.call('HGET', process, 'beat').to_f > Time.now.to_f - 60
+        end
+        redis.close
+        abort 'Background worker is not ready' unless ready
+        EOFCONF
+        chown 0:0 runtime-config/docuseal/docuseal-health.next
+        chmod 0444 runtime-config/docuseal/docuseal-health.next
+        mv runtime-config/docuseal/docuseal-health.next runtime-config/docuseal/docuseal-health
+        echo "Data directories and configuration files are ready."
+networks:
+  frontend: {}
+  database:
+    internal: true
+  cache:
+    internal: true

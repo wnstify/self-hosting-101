@@ -1,0 +1,327 @@
+services:
+  mongodb:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${MONGO_IMAGE:-dhi.io/mongodb:8.3.8-debian13@sha256:5445c5f44cff9dbd5b01366d25f239461d4f17a578a7be3a963029aaf4e00a02}
+    user: 999:999
+    command:
+    - --auth
+    - --bind_ip_all
+    - --wiredTigerCacheSizeGB
+    - '0.25'
+    read_only: true
+    tmpfs:
+    - /tmp:size=32m,mode=1777
+    volumes:
+    - ./mongodb:/data/db
+    - ./mongodb-config:/data/configdb
+    - ./runtime-checks:/checks:ro
+    networks:
+    - database
+    stop_grace_period: 30s
+    mem_limit: 512m
+    pids_limit: 150
+    healthcheck:
+      # Require a live TCP listener before database initialization.
+      test: ["CMD", "/checks/ld-musl.so.1", "/checks/busybox", "nc", "-z", "-w", "3", "127.0.0.1", "27017"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 20s
+  database-init:
+    restart: 'no'
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${MESHCENTRAL_IMAGE:-ghcr.io/ylianst/meshcentral:1.2.5-mongodb@sha256:fedaf762a182f9cc6ee086223bfc1892062f52a542ff63cf60cf8ca3940a87e2}
+    user: 1000:1000
+    entrypoint:
+    - node
+    read_only: true
+    tmpfs:
+    - /tmp:size=64m,mode=1777
+    environment:
+      MONGO_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_PASSWORD: ${MONGO_PASSWORD}
+    volumes:
+    - type: bind
+      source: ./runtime-config/database-init.cjs
+      target: /checks/database-init.cjs
+      read_only: true
+      bind:
+        create_host_path: false
+    mem_limit: 384m
+    pids_limit: 100
+    command:
+    - /checks/database-init.cjs
+    network_mode: service:mongodb
+    depends_on:
+      mongodb:
+        condition: service_healthy
+  account-init:
+    restart: 'no'
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${MESHCENTRAL_IMAGE:-ghcr.io/ylianst/meshcentral:1.2.5-mongodb@sha256:fedaf762a182f9cc6ee086223bfc1892062f52a542ff63cf60cf8ca3940a87e2}
+    user: 1000:1000
+    entrypoint:
+    - node
+    read_only: true
+    tmpfs:
+    - /tmp:size=64m,mode=1777
+    environment:
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      NODE_OPTIONS: --max-old-space-size=256
+    volumes:
+    - ./data:/opt/meshcentral/meshcentral-data
+    - ./files:/opt/meshcentral/meshcentral-files
+    - ./web:/opt/meshcentral/meshcentral-web
+    - ./backups:/opt/meshcentral/meshcentral-backups
+    - type: bind
+      source: ./runtime-config/config.json
+      target: /opt/meshcentral/meshcentral-data/config.json
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ./runtime-config/account-init.cjs
+      target: /checks/account-init.cjs
+      read_only: true
+      bind:
+        create_host_path: false
+    mem_limit: 384m
+    pids_limit: 100
+    command:
+    - /checks/account-init.cjs
+    networks:
+    - database
+    depends_on:
+      database-init:
+        condition: service_completed_successfully
+  meshcentral:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${MESHCENTRAL_IMAGE:-ghcr.io/ylianst/meshcentral:1.2.5-mongodb@sha256:fedaf762a182f9cc6ee086223bfc1892062f52a542ff63cf60cf8ca3940a87e2}
+    user: 1000:1000
+    entrypoint:
+    - node
+    read_only: true
+    tmpfs:
+    - /tmp:size=64m,mode=1777
+    environment:
+      TZ: ${TZ}
+      NODE_OPTIONS: --max-old-space-size=256
+    volumes:
+    - ./data:/opt/meshcentral/meshcentral-data
+    - ./files:/opt/meshcentral/meshcentral-files
+    - ./web:/opt/meshcentral/meshcentral-web
+    - ./backups:/opt/meshcentral/meshcentral-backups
+    - type: bind
+      source: ./runtime-config/config.json
+      target: /opt/meshcentral/meshcentral-data/config.json
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ./runtime-config/health.cjs
+      target: /checks/health.cjs
+      read_only: true
+      bind:
+        create_host_path: false
+    mem_limit: 384m
+    pids_limit: 100
+    command:
+    - meshcentral/meshcentral.js
+    ports:
+    - 127.0.0.1:${PORT}:4430
+    networks:
+    - frontend
+    - database
+    depends_on:
+      account-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+      - CMD
+      - node
+      - /checks/health.cjs
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 90s
+  prepare:
+    image: ${PREPARE_IMAGE:-dhi.io/busybox:1.37.0-alpine3.24@sha256:cf19544e3830bfd972cd1ab793be113129c61f214583648d590289eaa938ce5a}
+    profiles: [init]
+    restart: "no"
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 32m
+    pids_limit: 32
+    volumes: [.:/project]
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        cd /project
+        mkdir -p runtime-checks
+        chmod 0755 runtime-checks
+        cp /bin/busybox runtime-checks/busybox
+        chmod 0555 runtime-checks/busybox
+        cp /lib/ld-musl-*.so.1 runtime-checks/ld-musl.so.1
+        chmod 0555 runtime-checks/ld-musl.so.1
+        umask 077
+        mkdir -p mongodb mongodb-config data files web backups runtime-config
+        chown -R 999:999 mongodb mongodb-config
+        chmod 0700 mongodb mongodb-config
+        chown -R 1000:1000 data files web backups
+        chmod 0700 data files backups
+        chmod 0750 web
+        chmod 0711 runtime-config
+        cat > runtime-config/config.json.next <<'JSON'
+        {
+          "settings": {
+            "cert": "${MESH_HOST:-127.0.0.1}",
+            "port": 4430,
+            "aliasPort": ${MESH_ALIAS_PORT:-4430},
+            "redirPort": 0,
+            "mpsPort": 0,
+            "WANonly": true,
+            "exactPorts": true,
+            "tlsOffload": true,
+            "selfUpdate": false,
+            "WebRTC": false,
+            "sessionKey": "${SESSION_KEY}",
+            "agentPing": 60,
+            "mongoDb": "mongodb://meshcentral:${MONGO_PASSWORD}@mongodb:27017/meshcentral",
+            "plugins": {"enabled": false}
+          },
+          "domains": {
+            "": {
+              "title": "MeshCentral",
+              "newAccounts": false,
+              "minify": true,
+              "certUrl": ${MESH_CERT_URL_JSON:-null}
+            }
+          }
+        }
+        JSON
+        chown 1000:1000 runtime-config/config.json.next
+        chmod 0400 runtime-config/config.json.next
+        mv runtime-config/config.json.next runtime-config/config.json
+        cat > runtime-config/database-init.cjs.next <<'JS'
+        const { MongoClient } = require('/opt/meshcentral/meshcentral/node_modules/mongodb');
+        const options = { serverSelectionTimeoutMS: 3000, connectTimeoutMS: 3000 };
+        const uri = 'mongodb://127.0.0.1:27017';
+        const root = new MongoClient(uri, { ...options, auth: { username: 'root', password: process.env.MONGO_ROOT_PASSWORD }, authSource: 'admin' });
+        (async () => {
+          for (let attempt = 0; ; attempt++) {
+            const local = new MongoClient(uri, options);
+            try {
+              await local.connect();
+              await local.db('admin').command({ ping: 1 });
+              break;
+            } catch (error) {
+              if (attempt === 39) throw error;
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            } finally { await local.close(); }
+          }
+          try {
+            await root.connect();
+          } catch (error) {
+            if (error.code !== 18) throw error;
+            const local = new MongoClient(uri, options);
+            try {
+              await local.connect();
+              await local.db('admin').command({ createUser: 'root', pwd: process.env.MONGO_ROOT_PASSWORD, roles: ['root'] });
+            } finally { await local.close(); }
+            await root.connect();
+          }
+          const db = root.db('meshcentral');
+          if (!(await db.command({ usersInfo: 'meshcentral' })).users.length) {
+            await db.command({ createUser: 'meshcentral', pwd: process.env.MONGO_PASSWORD, roles: [{ role: 'readWrite', db: 'meshcentral' }] });
+          }
+          const app = new MongoClient('mongodb://meshcentral:' + process.env.MONGO_PASSWORD + '@127.0.0.1:27017/meshcentral', options);
+          try { await app.connect(); await app.db().command({ ping: 1 }); }
+          finally { await app.close(); }
+          console.log('MongoDB application account is ready.');
+        })().catch(() => { console.error('MongoDB account initialization failed. Check the saved credentials and database logs.'); process.exitCode = 1; })
+          .finally(() => root.close());
+        JS
+        chown 1000:1000 runtime-config/database-init.cjs.next
+        chmod 0444 runtime-config/database-init.cjs.next
+        mv runtime-config/database-init.cjs.next runtime-config/database-init.cjs
+        cat > runtime-config/account-init.cjs.next <<'JS'
+        const fs = require('node:fs');
+        const { promisify } = require('node:util');
+        const run = promisify(require('node:child_process').execFile);
+        const marker = '/opt/meshcentral/meshcentral-data/.admin-created';
+        (async () => {
+          if (fs.existsSync(marker)) return;
+          for (const action of ['createaccount', 'adminaccount']) {
+            const result = await run(process.execPath, ['-e', `
+              process.argv = ['node', 'meshcentral.js', '--launch', '--' + process.env.ACCOUNT_ACTION, 'admin'];
+              if (process.env.ACCOUNT_ACTION === 'createaccount') process.argv.push('--pass', process.env.ADMIN_PASSWORD, '--email', process.env.ADMIN_EMAIL);
+              require('/opt/meshcentral/meshcentral/meshcentral.js').mainStart();
+            `], { env: { ...process.env, ACCOUNT_ACTION: action }, encoding: 'utf8', timeout: 120000 });
+            if (!(/Done\./.test(result.stdout) || action === 'createaccount' && /User already exists\./.test(result.stdout))) throw new Error('Account command failed');
+          }
+          fs.writeFileSync(marker, 'ready\n', { mode: 0o600, flag: 'wx' });
+          console.log('Administrator created. Public registration is disabled.');
+        })().catch(() => { console.error('Administrator initialization failed. Inspect the MongoDB and account-init service configuration.'); process.exit(1); });
+        JS
+        chown 1000:1000 runtime-config/account-init.cjs.next
+        chmod 0444 runtime-config/account-init.cjs.next
+        mv runtime-config/account-init.cjs.next runtime-config/account-init.cjs
+        cat > runtime-config/health.cjs.next <<'JS'
+        const { MongoClient } = require('/opt/meshcentral/meshcentral/node_modules/mongodb');
+        const config = require('/opt/meshcentral/meshcentral-data/config.json');
+        const client = new MongoClient(config.settings.mongoDb, { serverSelectionTimeoutMS: 3000 });
+        (async () => {
+          const response = await fetch('http://127.0.0.1:4430/health.ashx', { signal: AbortSignal.timeout(3000) });
+          if (!response.ok || (await response.text()).trim() !== 'ok') throw new Error('MeshCentral HTTP check failed');
+          await client.connect();
+          await client.db().command({ ping: 1 });
+        })().catch(() => { console.error('MeshCentral or MongoDB is unavailable.'); process.exitCode = 1; })
+          .finally(() => client.close());
+        JS
+        chown 1000:1000 runtime-config/health.cjs.next
+        chmod 0444 runtime-config/health.cjs.next
+        mv runtime-config/health.cjs.next runtime-config/health.cjs
+        echo "Data directories and configuration files are ready."
+networks:
+  frontend: {}
+  database:
+    internal: true

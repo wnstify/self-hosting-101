@@ -1,0 +1,138 @@
+services:
+  qbittorrent:
+    image: ${QBITTORRENT_IMAGE:-qbittorrentofficial/qbittorrent-nox:5.2.1-1@sha256:d1003daa619b33f02cf094347de8d4db985f916ec9c80bde7093d32b6ea1c019}
+    user: '1000:0'
+    restart: unless-stopped
+    read_only: true
+    environment:
+      TZ: ${TZ}
+      UMASK: '0007'
+      QBT_LEGAL_NOTICE: confirm
+      QBT_WEBUI_PORT: ${PORT}
+      QBT_TORRENTING_PORT: ${TORRENT_PORT}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+    volumes:
+    - ./config:/config
+    - ./downloads:/downloads
+    - ./tmp:/tmp
+    - type: bind
+      source: ./runtime-config/qbittorrent/qBittorrent-config-qBittorrent-conf
+      target: /defaults/qBittorrent.conf
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ./runtime-config/qbittorrent/initialize
+      target: /initialize.py
+      read_only: true
+      bind:
+        create_host_path: false
+    ports:
+    - 127.0.0.1:${PORT}:${PORT}
+    - ${TORRENT_PORT}:${TORRENT_PORT}/tcp
+    - ${TORRENT_PORT}:${TORRENT_PORT}/udp
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    ipc: private
+    stop_grace_period: 30m
+    mem_limit: 512m
+    pids_limit: 300
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - wget --quiet --tries=1 --spider "http://127.0.0.1:$$QBT_WEBUI_PORT/"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    entrypoint:
+    - python3
+    - /initialize.py
+  prepare:
+    image: ${PREPARE_IMAGE:-busybox:1.37.0-musl@sha256:fc6dddc4c44b1bfe37f41cae8e67d1693828e8f42a91862816d7953e2c9d3f23}
+    profiles: [init]
+    restart: "no"
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 32m
+    pids_limit: 32
+    volumes: [.:/project]
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        cd /project
+        umask 077
+        mkdir -p config/qBittorrent/config tmp downloads/incomplete
+        chown -R 1000:0 config tmp
+        chmod 0770 config config/qBittorrent config/qBittorrent/config tmp
+        chown 0:0 downloads downloads/incomplete
+        chmod 0770 downloads downloads/incomplete
+        mkdir -p runtime-config/qbittorrent
+        chmod 0711 runtime-config/qbittorrent
+        cat > runtime-config/qbittorrent/qBittorrent-config-qBittorrent-conf.next <<'RECIPEFILE'
+        [BitTorrent]
+        Session\DefaultSavePath=/downloads
+        Session\Port=${TORRENT_PORT}
+        Session\TempPath=/downloads/incomplete
+        Session\TempPathEnabled=true
+        [Meta]
+        MigrationVersion=9999
+        [Network]
+        PortForwardingEnabled=false
+        [Preferences]
+        Advanced\updateCheck=false
+        Connection\ResolvePeerCountries=false
+        WebUI\Port=${PORT}
+        WebUI\Username=admin
+        WebUI\Password_PBKDF2="@ByteArray(@PASSWORD_HASH@)"
+        WebUI\ServerDomains="localhost;127.0.0.1;${DOMAIN}"
+        WebUI\LocalHostAuth=true
+        WebUI\AuthSubnetWhitelistEnabled=false
+        WebUI\CSRFProtection=true
+        WebUI\HostHeaderValidation=true
+        WebUI\UseUPnP=false
+        RECIPEFILE
+        chown 0:0 runtime-config/qbittorrent/qBittorrent-config-qBittorrent-conf.next
+        chmod 0444 runtime-config/qbittorrent/qBittorrent-config-qBittorrent-conf.next
+        mv runtime-config/qbittorrent/qBittorrent-config-qBittorrent-conf.next runtime-config/qbittorrent/qBittorrent-config-qBittorrent-conf
+        mkdir -p runtime-config/qbittorrent
+        chmod 0711 runtime-config/qbittorrent
+        cat > runtime-config/qbittorrent/initialize.next <<'RECIPEFILE'
+        import base64
+        import hashlib
+        import os
+        from pathlib import Path
+        import secrets
+
+        os.umask(0o007)
+        path = Path('/config/qBittorrent/config/qBittorrent.conf')
+        password = os.environ.pop('ADMIN_PASSWORD')
+        if not path.exists():
+            if not password:
+                raise SystemExit('Set ADMIN_PASSWORD in .env before the first start.')
+            salt = secrets.token_bytes(16)
+            digest = hashlib.pbkdf2_hmac('sha512', password.encode(), salt, 100000, 64)
+            password_hash = base64.b64encode(salt).decode() + ':' + base64.b64encode(digest).decode()
+            contents = Path('/defaults/qBittorrent.conf').read_text().replace('@PASSWORD_HASH@', password_hash)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(contents)
+            path.chmod(0o660)
+        os.execv('/sbin/tini', ['/sbin/tini', '-g', '--', '/entrypoint.sh'])
+        RECIPEFILE
+        chown 0:0 runtime-config/qbittorrent/initialize.next
+        chmod 0444 runtime-config/qbittorrent/initialize.next
+        mv runtime-config/qbittorrent/initialize.next runtime-config/qbittorrent/initialize
+        echo "Data directories and runtime configuration are ready."
+networks:
+  default: {}

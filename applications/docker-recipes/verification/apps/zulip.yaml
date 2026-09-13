@@ -1,0 +1,10 @@
+probe:
+  path: /login/
+  status: [200]
+timeout: 900
+values:
+  FAKE_EMAIL_DOMAIN: zulip.test
+  SMTP_PASSWORD: ""
+allow: []
+set:
+  SITE_URL: http://127.0.0.1:${PORT}

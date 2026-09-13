@@ -1,0 +1,365 @@
+services:
+  postgres:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${POSTGRES_IMAGE:-dhi.io/postgres:18.6-alpine3.24@sha256:d23585213fe835f109c6c74e68679c9c96fe6d3debe569b6c0fc89dc7f2977d0}
+    user: ${POSTGRES_UID:-70}:${POSTGRES_GID:-70}
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: ${TZ:-UTC}
+      PGDATA: /var/lib/postgresql/18/data
+    volumes:
+    - ./postgres:/var/lib/postgresql
+    networks:
+    - database
+    tmpfs:
+    - /tmp:size=64M,mode=1777
+    - /run/postgresql:size=32M,uid=${POSTGRES_UID:-70},gid=${POSTGRES_GID:-70},mode=0755
+    stop_grace_period: 30s
+    mem_limit: 256m
+    pids_limit: 100
+    healthcheck:
+      test:
+      - CMD
+      - pg_isready
+      - -h
+      - 127.0.0.1
+      - -U
+      - postgres
+      - -d
+      - postgres
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+  database-init:
+    restart: 'no'
+    tmpfs:
+    - /var/lib/postgresql:size=16M,uid=${POSTGRES_UID:-70},gid=${POSTGRES_GID:-70},mode=0700
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${POSTGRES_IMAGE:-dhi.io/postgres:18.6-alpine3.24@sha256:d23585213fe835f109c6c74e68679c9c96fe6d3debe569b6c0fc89dc7f2977d0}
+    user: ${POSTGRES_UID:-70}:${POSTGRES_GID:-70}
+    read_only: true
+    entrypoint:
+    - psql
+    command:
+    - -h
+    - postgres
+    - -U
+    - postgres
+    - -d
+    - postgres
+    - -v
+    - ON_ERROR_STOP=1
+    - -f
+    - /init.sql
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGCONNECT_TIMEOUT: '10'
+      PGOPTIONS: -c statement_timeout=30000
+      PGDATA: /var/lib/postgresql/18/data
+      TZ: ${TZ:-UTC}
+    networks:
+    - database
+    mem_limit: 64m
+    pids_limit: 32
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+    - type: bind
+      source: ./runtime-config/database-init/config_init_sql
+      target: /init.sql
+      read_only: true
+      bind:
+        create_host_path: false
+  socket-proxy:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${DOCKER_SOCKET_PROXY_IMAGE:-tecnativa/docker-socket-proxy:0.3@sha256:9e4b9e7517a6b660f2cc903a19b257b1852d5b3344794e3ea334ff00ae677ac2}
+    user: 0:0
+    environment:
+      CONTAINERS: '1'
+      IMAGES: '1'
+      NETWORKS: '1'
+      VOLUMES: '1'
+      INFO: '1'
+      EVENTS: '1'
+      PING: '1'
+      VERSION: '1'
+      EXEC: '1'
+      SYSTEM: '1'
+      POST: '1'
+      DISABLE_IPV6: '1'
+      LOG_LEVEL: warning
+      TZ: ${TZ:-UTC}
+    volumes:
+    - ${DOCKER_SOCKET:-${XDG_RUNTIME_DIR:-/var/run}/docker.sock}:/var/run/docker.sock:ro
+    networks:
+    - socket
+    tmpfs:
+    - /run:size=8M
+    mem_limit: 64m
+    pids_limit: 64
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - -qO/dev/null
+      - http://127.0.0.1:2375/_ping
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+  dockhand:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${DOCKHAND_IMAGE:-fnsys/dockhand:v1.0.29@sha256:656ae5ed674d79b8251de275ae4259043f60222bbab563c71ed8dd91edd0b660}
+    user: 1001:1001
+    read_only: true
+    environment:
+      DATABASE_URL: postgres://dockhand:${DATABASE_PASSWORD}@postgres:5432/dockhand
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      DOCKER_HOST: tcp://socket-proxy:2375
+      HOST_DATA_DIR: ${HOST_DATA_DIR:-${PWD}/data}
+      HOME: /app/data/home
+      ORIGIN: ${SITE_URL}
+      TZ: ${TZ:-UTC}
+      NODE_OPTIONS: --max-old-space-size=384
+    volumes:
+    - ./data:/app/data
+    tmpfs:
+    - /tmp:size=128M,mode=1777
+    ports:
+    - 127.0.0.1:${PORT}:3000
+    networks:
+    - frontend
+    - database
+    - socket
+    mem_limit: 512m
+    pids_limit: 256
+    depends_on:
+      account-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - -fsS
+      - http://127.0.0.1:3000/api/health
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+  account-init:
+    restart: 'no'
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${DOCKHAND_IMAGE:-fnsys/dockhand:v1.0.29@sha256:656ae5ed674d79b8251de275ae4259043f60222bbab563c71ed8dd91edd0b660}
+    user: 1001:1001
+    read_only: true
+    entrypoint:
+    - /bin/sh
+    - -ec
+    command:
+    - |
+      # Apply packaged migrations before the server probes migration history.
+      node --input-type=module -e '
+        import postgres from "postgres";
+        import { drizzle } from "drizzle-orm/postgres-js";
+        import { migrate } from "drizzle-orm/postgres-js/migrator";
+        const client = postgres(process.env.DATABASE_URL, { max: 1 });
+        try { await migrate(drizzle(client), { migrationsFolder: "/app/drizzle-pg" }); }
+        finally { await client.end(); }
+      '
+      [ ! -f /state/account-ready ] || exit 0
+      node /app/server.js &
+      server=$$!
+      trap 'kill "$$server"; wait "$$server" || true' EXIT
+      node /bootstrap.mjs
+    environment:
+      DATABASE_URL: postgres://dockhand:${DATABASE_PASSWORD}@postgres:5432/dockhand
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      DOCKER_HOST: tcp://socket-proxy:2375
+      HOST_DATA_DIR: ${HOST_DATA_DIR:-${PWD}/data}
+      HOME: /app/data/home
+      ORIGIN: ${SITE_URL}
+      TZ: ${TZ:-UTC}
+      NODE_OPTIONS: --max-old-space-size=384
+      HOST: 127.0.0.1
+      SITE_URL: ${SITE_URL}
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+    volumes:
+    - ./data:/app/data
+    - ./state:/state
+    - type: bind
+      source: ./runtime-config/account-init/config_bootstrap_mjs
+      target: /bootstrap.mjs
+      read_only: true
+      bind:
+        create_host_path: false
+    networks:
+    - database
+    - socket
+    tmpfs:
+    - /tmp:size=128M,mode=1777
+    mem_limit: 640m
+    pids_limit: 256
+    depends_on:
+      database-init:
+        condition: service_completed_successfully
+      socket-proxy:
+        condition: service_healthy
+  prepare:
+    image: ${PREPARE_IMAGE:-dhi.io/busybox:1.37.0-alpine3.24@sha256:cf19544e3830bfd972cd1ab793be113129c61f214583648d590289eaa938ce5a}
+    profiles: [init]
+    restart: "no"
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 32m
+    pids_limit: 32
+    volumes: [.:/project]
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        cd /project
+        mkdir -p postgres data data/home state
+        chown -R ${POSTGRES_UID:-70}:${POSTGRES_GID:-70} postgres
+        chmod 0700 postgres
+        chown -R 1001:1001 data state
+        chmod 0750 data
+        chmod 0700 data/home state
+        umask 077
+        mkdir -p runtime-config/account-init runtime-config/database-init
+        chmod 0711 runtime-config runtime-config/account-init runtime-config/database-init
+        cat >runtime-config/database-init/config_init_sql.next <<'EOFCONF'
+        SELECT 'CREATE ROLE dockhand LOGIN PASSWORD ''${DATABASE_PASSWORD}'''
+        WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'dockhand') \gexec
+        SELECT 'CREATE DATABASE dockhand OWNER dockhand'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'dockhand') \gexec
+        EOFCONF
+        chown ${POSTGRES_UID:-70}:${POSTGRES_GID:-70} runtime-config/database-init/config_init_sql.next
+        chmod 0400 runtime-config/database-init/config_init_sql.next
+        mv runtime-config/database-init/config_init_sql.next runtime-config/database-init/config_init_sql
+        cat >runtime-config/account-init/config_bootstrap_mjs.next <<'EOFCONF'
+        import fs from 'node:fs';
+
+        const marker = '/state/account-ready';
+        let cookie = '';
+        async function request(path, method = 'GET', body) {
+          const response = await fetch(`http://127.0.0.1:3000$${path}`, {
+            method,
+            headers: { 'Content-Type': 'application/json', Origin: process.env.SITE_URL, Cookie: cookie },
+            body: body === undefined ? undefined : JSON.stringify(body),
+            signal: AbortSignal.timeout(15000),
+          });
+          if (!response.ok) throw new Error(`$${path} returned HTTP $${response.status}`);
+          const cookies = response.headers.getSetCookie();
+          if (cookies.length) cookie = cookies.map(value => value.split(';')[0]).join('; ');
+          return response.json();
+        }
+
+        try {
+          if (!fs.existsSync(marker)) {
+            const deadline = Date.now() + 60000;
+            while (true) {
+              try {
+                await request('/api/health');
+                break;
+              } catch (error) {
+                if (Date.now() >= deadline) throw error;
+                await new Promise(resolve => setTimeout(resolve, 500));
+              }
+            }
+            const credentials = { username: process.env.ADMIN_USERNAME, password: process.env.ADMIN_PASSWORD };
+            const session = await request('/api/auth/session');
+            if (!session.authEnabled) {
+              const users = await request('/api/users');
+              if (users.length === 0) {
+                await request('/api/users', 'POST', { ...credentials, email: process.env.ADMIN_EMAIL });
+              } else if (users.length !== 1 || users[0].username !== credentials.username) {
+                throw new Error('Existing users differ from this installation. Review authentication before retrying.');
+              }
+              await request('/api/auth/settings', 'PUT', { authEnabled: true, sessionTimeout: 86400 });
+            }
+            const login = await request('/api/auth/login', 'POST', credentials);
+            if (!login.success || !login.user?.isAdmin || !cookie) throw new Error('Administrator login failed');
+            const environments = await request('/api/environments');
+            let environment = environments.find(value => value.name === 'Local rootless Docker');
+            if (!environment) {
+              environment = await request('/api/environments', 'POST', {
+                name: 'Local rootless Docker', connectionType: 'direct',
+                host: 'socket-proxy', port: 2375, protocol: 'http',
+              });
+            }
+            if (environment.connectionType !== 'direct' || environment.host !== 'socket-proxy' || environment.port !== 2375) {
+              throw new Error('The local Docker environment does not use this installation socket proxy');
+            }
+            const connection = await request(`/api/environments/$${environment.id}/test`, 'POST', {});
+            if (!connection.success) throw new Error('Cannot reach the rootless Docker daemon through the socket proxy');
+            await request('/api/auth/logout', 'POST', {});
+            fs.writeFileSync(marker, 'ready\n', { mode: 0o600, flag: 'wx' });
+            console.log('Administrator ready; authentication enabled; rootless Docker connected.');
+          }
+        } catch (error) {
+          console.error(error.message);
+          process.exit(1);
+        }
+        EOFCONF
+        chown 0:0 runtime-config/account-init/config_bootstrap_mjs.next
+        chmod 0444 runtime-config/account-init/config_bootstrap_mjs.next
+        mv runtime-config/account-init/config_bootstrap_mjs.next runtime-config/account-init/config_bootstrap_mjs
+        echo "Data directories and configuration files are ready."
+networks:
+  frontend: {}
+  database:
+    internal: true
+  socket:
+    internal: true
