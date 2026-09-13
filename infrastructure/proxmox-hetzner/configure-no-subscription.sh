@@ -1,4 +1,5 @@
 #!/bin/bash
+# Physical Proxmox host only. Switches to the no-subscription repository and applies all updates.
 set -euo pipefail
 
 [[ "${EUID}" -eq 0 ]] || { echo "Run as root" >&2; exit 1; }

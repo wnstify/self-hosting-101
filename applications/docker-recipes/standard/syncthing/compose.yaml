@@ -1,7 +1,7 @@
 services:
   syncthing-init:
     image: ${SYNCTHING_IMAGE:-syncthing/syncthing:2.1.1@sha256:775c4aac486263ca8653055bba7d3061799281974b706695e17bc798da3f4e92}
-    user: 0:0
+    user: ${SYNCTHING_UID:-0}:${SYNCTHING_GID:-0}
     read_only: true
     cap_drop:
     - ALL
@@ -55,7 +55,7 @@ services:
       disable: true
   syncthing:
     image: ${SYNCTHING_IMAGE:-syncthing/syncthing:2.1.1@sha256:775c4aac486263ca8653055bba7d3061799281974b706695e17bc798da3f4e92}
-    user: 0:0
+    user: ${SYNCTHING_UID:-0}:${SYNCTHING_GID:-0}
     read_only: true
     cap_drop:
     - ALL
@@ -125,9 +125,9 @@ services:
         cd /project
         umask 077
         mkdir -p config sync
-        chown -R 0:0 config
+        chown -R ${SYNCTHING_UID:-0}:${SYNCTHING_GID:-0} config
         chmod 0700 config
-        chown 0:0 sync
+        chown ${SYNCTHING_UID:-0}:${SYNCTHING_GID:-0} sync
         chmod 0700 sync
         mkdir -p runtime-config/syncthing-init
         chmod 0711 runtime-config/syncthing-init
@@ -135,7 +135,7 @@ services:
         ${ADMIN_PASSWORD}
         RECIPEFILE
         grep -q '[^[:space:]]' runtime-config/syncthing-init/gui-password.next || { echo "Set ADMIN_PASSWORD in .env before running prepare; an empty password locks you out of the web UI." >&2; exit 1; }
-        chown 0:0 runtime-config/syncthing-init/gui-password.next
+        chown ${SYNCTHING_UID:-0}:${SYNCTHING_GID:-0} runtime-config/syncthing-init/gui-password.next
         chmod 0600 runtime-config/syncthing-init/gui-password.next
         mv runtime-config/syncthing-init/gui-password.next runtime-config/syncthing-init/gui-password
         mkdir -p runtime-config/syncthing-init
@@ -159,7 +159,7 @@ services:
           </options>
         </configuration>
         RECIPEFILE
-        chown 0:0 runtime-config/syncthing-init/initial-config.next
+        chown ${SYNCTHING_UID:-0}:${SYNCTHING_GID:-0} runtime-config/syncthing-init/initial-config.next
         chmod 0600 runtime-config/syncthing-init/initial-config.next
         mv runtime-config/syncthing-init/initial-config.next runtime-config/syncthing-init/initial-config
         echo "Data directories and runtime configuration are ready."

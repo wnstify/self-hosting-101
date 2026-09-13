@@ -32,11 +32,12 @@ Its cluster guard is untested. No cluster was available, so the refusal on an ex
 
 Everything below was checked locally only. The installation scripts have not been rerun against a server since the test above.
 
-- Same day, after the test: the launchers were restricted to legacy BIOS. Local policy tests confirm they reject UEFI and missing or invalid firmware settings. Shell syntax checks and link checks passed.
-- Same day, review: the verification guide separated the installer-unit check from the reusable disk inspection, added the disk checks and lock before mounting boot partitions, and made the final IPv6 check stop on failure. The credential helper now validates each SSH public key before prompting for a password. Five local regression tests cover it with synthetic keys and a mocked hash.
+- 2026-09-07, after the test: the launchers were restricted to legacy BIOS. Local policy tests confirm they reject UEFI and missing or invalid firmware settings. Shell syntax checks and link checks passed.
+- 2026-09-07, first review: the verification guide separated the installer-unit check from the reusable disk inspection, added the disk checks and lock before mounting boot partitions, and made the final IPv6 check stop on failure. The credential helper now validates each SSH public key before prompting for a password. Five local regression tests cover it with synthetic keys and a mocked hash.
 - 2026-09-07, second review: the erase flag now has to name both approved serials instead of `YES`. The builder refuses an answer whose MAC filter and `nic0` mapping do not match `NIC_MAC` in `install.env`, and refuses the documentation network values. The long-running systemd units keep their result with `RemainAfterExit=yes` so a finished unit can be told apart from one that never ran. The first-boot hook marks its sysctl keys optional so they stop logging errors after IPv6 is disabled in the kernel. The live refusal test gained cases for a legacy `YES` flag and a flag for other serials.
+- 2026-09-13, publication review: `answer.toml.example` uses placeholders for country and timezone so the builder's placeholder check covers them. `preflight.sh` no longer stops when `/proc/mdstat` or `dmidecode` is unavailable. Every script now opens with a comment naming the machine it runs on. The guide gained expected results, the installer done condition, the Rescue disk-space requirement, and staging commands for the refusal test. No logic that touches disks changed.
 
-Local tests pass on Windows with Python 3.14 and Git Bash. They do not replace Proxmox answer validation or a live installation.
+Local tests were last run on Windows with Python 3.14 and Git Bash; they need Python 3.11 or later, Bash, and `ssh-keygen`. They do not replace Proxmox answer validation or a live installation.
 
 ## Not tested
 

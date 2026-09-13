@@ -18,7 +18,7 @@ args = parser.parse_args()
 os.umask(0o077)
 text = args.answer.read_text()
 if 'REPLACE_WITH_SHA512_CRYPT_HASH' not in text or '"REPLACE_WITH_SSH_PUBLIC_KEY"' not in text:
-    parser.error('Expected credential placeholders in the answer file')
+    parser.error('Expected the REPLACE_WITH_SHA512_CRYPT_HASH and REPLACE_WITH_SSH_PUBLIC_KEY placeholders. Start from a fresh copy of answer.toml.example.')
 keys = []
 for line_number, line in enumerate(args.public_keys.read_text().splitlines(), start=1):
     if not line.strip() or line.lstrip().startswith('#'):

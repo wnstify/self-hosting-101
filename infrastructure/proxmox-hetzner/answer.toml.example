@@ -1,9 +1,9 @@
 [global]
 keyboard = "en-us"
-country = "sk"
+country = "REPLACE_WITH_COUNTRY_CODE"
 fqdn = "pve.example.com"
 mailto = "admin@example.com"
-timezone = "Europe/Bratislava"
+timezone = "REPLACE_WITH_TIMEZONE"
 root-password-hashed = "REPLACE_WITH_SHA512_CRYPT_HASH"
 root-ssh-keys = [
     "REPLACE_WITH_SSH_PUBLIC_KEY"

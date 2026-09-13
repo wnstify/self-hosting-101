@@ -50,11 +50,13 @@ services:
     command:
       - |
         cd /project
+        # The media directories belong to whoever owns the deployment directory, so they stay yours on a rootful daemon.
+        owner=$$(stat -c %u:%g /project)
         mkdir -p config cache tmp media movies shows
         chown -R 1000:0 config cache tmp
         chmod 0770 config cache tmp
-        chown 0:0 media movies shows
-        chmod 0750 media movies shows
+        chown "$$owner" media movies shows
+        chmod 0755 media movies shows
         echo "Data directories are ready."
 networks:
   default: {}

@@ -1,6 +1,6 @@
 # Contributing and repository layout
 
-Keep each topic usable on its own and link to prerequisites. Topics without content stay in the roadmap until a draft exists.
+Keep each topic usable on its own and link to prerequisites. A category index may exist before its guides do. A topic gets its own folder only when a draft exists; until then it stays in the roadmap.
 
 ## Where files belong
 
@@ -25,11 +25,11 @@ category/topic/
 
 Create optional directories only when there is something to put in them. Keep helpers in the layout their commands and tests expect. Move reusable code into a shared location only when more than one guide needs it.
 
-The root `skills/` directory holds agent checklists. Each skill must locate its companion topic directory and use the same scripts as the guide. Tool-specific folders such as `.claude/`, `.codex/`, and `.agents/` are local and git-ignored; a user tells their agent to install the skill from `skills/`. The root `records/` directory is git-ignored and holds private deployment evidence.
+The root `skills/` directory holds agent checklists. Each skill must locate its companion topic directory and use the same scripts as the guide. Tool-specific folders such as `.claude/`, `.codex/`, and `.agents/` are local and git-ignored; a user tells their agent to install the skill from `skills/`. A root `records/` directory is git-ignored; create it for private deployment evidence.
 
 ## Report a problem
 
-Use the issue templates. `Guide correction` is for a step that is wrong or unclear; `Script problem` is for a script that refused, failed, or gave a wrong result. Both require a sanitized report. Blank issues are off. Feature requests and questions about your own setup get closed with a pointer to the video comments. Pull requests that fix a guide or a script are welcome; open an issue first for anything larger.
+Use the issue templates. `Guide correction` is for a step that is wrong or unclear; `Script problem` is for a script that refused, failed, or gave a wrong result. Both require a sanitized report. Blank issues are off. Feature requests and questions about your own setup get closed with a pointer to the channel. Pull requests that fix a guide or a script are welcome; open an issue first for anything larger.
 
 Security flaws go to the address in [SECURITY.md](SECURITY.md), never to a public issue.
 
@@ -39,7 +39,7 @@ Guides are `Planned`, `Draft`, `Available`, or `Archived`. `Planned` means no gu
 
 Videos are `Planned`, `Recording`, or `Published`. Add a YouTube link only after publication.
 
-Each guide opens with a table showing its status, video status, last live test, and materials. The tested configuration file holds the detail: what passed, what changed since, and what was not tested. Documents and slides count as available only when their file or public link exists.
+Each guide opens with a table showing its status, video status, last live test, and materials. A shared library without a guide, such as the Compose recipes, uses the same status words with a last local check instead of a live test. The tested configuration file holds the detail: what passed, what changed since, and what was not tested. Documents and slides count as available only when their file or public link exists.
 
 ## Write a guide
 
@@ -73,15 +73,15 @@ A test date belongs to the validation it records. Changing a guide's wording or 
 
 These local tests need Python 3.11 or later, Bash, and `ssh-keygen`. They touch no disks and no server. Run them on the workstation from the repository root:
 
-```text
-python infrastructure/proxmox-hetzner/tests/test-firmware-policy.py
-python infrastructure/proxmox-hetzner/tests/test-answer-credentials.py
+```bash
+python3 infrastructure/proxmox-hetzner/tests/test-firmware-policy.py
+python3 infrastructure/proxmox-hetzner/tests/test-answer-credentials.py
 ```
 
 The firmware test checks that both launchers refuse UEFI and missing or invalid firmware modes. The credential test checks SSH public-key validation with synthetic keys and a mocked password hash. Syntax-check the shell scripts in Git Bash:
 
-```text
+```bash
 for script in infrastructure/proxmox-hetzner/*.sh infrastructure/proxmox-hetzner/tests/*.sh; do bash -n "$script"; done
 ```
 
-The live refusal test, `tests/preflight-refusals.sh`, runs in Rescue and is described in the [installation guide](infrastructure/proxmox-hetzner/README.md#agent-instructions).
+The live refusal test, `infrastructure/proxmox-hetzner/tests/preflight-refusals.sh`, runs in Rescue and is described in the [installation guide](infrastructure/proxmox-hetzner/README.md#agent-instructions).

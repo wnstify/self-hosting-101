@@ -6,7 +6,7 @@ Install Proxmox VE on a bare-metal server from its provider's rescue system, usi
 
 | Detail | Value |
 |---|---|
-| Status | Available for the tested configuration |
+| Status | Available |
 | Video | Recording |
 | Last live test | 2026-09-07 on a Hetzner AX41, see [tested configuration](tested-configuration.md) |
 | Materials | None yet |
@@ -15,7 +15,7 @@ The scripts changed after that live test. The tested configuration lists which c
 
 ## What this guide does
 
-You end up with Proxmox VE 9 on a two-NVMe ZFS mirror, a static IPv4 address pinned to the physical NIC, IPv6 disabled, key-only SSH, the web GUI on localhost only, the cluster services turned off, and all updates applied. Guests, a reverse proxy, and Pangolin are separate guides.
+You end up with Proxmox VE 9 on a two-NVMe ZFS mirror, a static IPv4 address pinned to the physical NIC, IPv6 disabled, key-only SSH, the web GUI on localhost only, the cluster services turned off, and all updates applied. Guests, a reverse proxy, and Pangolin, the tunneled reverse proxy planned for a later episode, are out of scope here.
 
 Everything the guide configures comes from the scripts in this directory. You do not need a third-party post-install script on top; [verification and first boot](verification.md) covers the repository switch, updates, and the single-node cleanup.
 
@@ -27,7 +27,8 @@ The tested hardware is a Hetzner AX41, an AMD server with two NVMe drives and a 
 - A rescue or live system you can boot from the provider panel with your SSH public key. It must be Debian 12 or 13 based with root over SSH and `apt` access to the internet, because the builder installs QEMU and debootstrap there. The guide calls it Rescue whatever the provider names it.
 - Legacy BIOS boot. Either the server boots in BIOS mode already or the provider lets you set that through a console or support.
 - Two disks of the same size for the ZFS mirror. NVMe is tested. QEMU presents both disks as NVMe whatever the physical bus, so the answer file's device names stay the same.
-- Enough RAM and CPU in Rescue for the guest. The launchers give it 8 GB and 8 threads; lower `-m` and `-smp` in both launchers if the server has less.
+- Enough RAM and CPU in Rescue for the guest. The launchers give it 8 GB and 8 threads; lower `-m` and `-smp` in `install-qemu.sh` and `boot-installed-qemu.sh` if the server has less.
+- Roughly 8 GB of free space in Rescue. The builder creates a Debian chroot in `/opt/proxmox-auto-trixie` and keeps two ISO images in `/tmp/proxmox-auto`. On a RAM-based rescue system that space comes out of RAM; check with `df -h /tmp /opt`.
 - A static public IPv4 address with a gateway inside its subnet, and a provider panel that shows the address, prefix, gateway, and the NIC's MAC so you can check what Rescue reports.
 - Console access, such as KVM over IP or IPMI, for the case where the physical boot fails.
 
@@ -68,7 +69,7 @@ scp preflight.sh root@SERVER_IP:/root/preflight.sh
 ssh root@SERVER_IP 'bash /root/preflight.sh'
 ```
 
-The output must show `BOOT_MODE=BIOS`. If it shows UEFI, stop here and arrange a legacy BIOS boot.
+The output must show `BOOT_MODE=BIOS`. If it shows UEFI, stop here and arrange a legacy BIOS boot. It must not print `KVM_MISSING`; if it does, the rescue system has no usable KVM and this workflow cannot run there.
 
 In Rescue, read the health of each intended drive. Replace the device paths with the ones preflight listed:
 
@@ -76,6 +77,8 @@ In Rescue, read the health of each intended drive. Replace the device paths with
 smartctl -H -A /dev/nvme0n1
 smartctl -H -A /dev/nvme1n1
 ```
+
+Expect `SMART overall-health self-assessment test result: PASSED` for each drive. If `smartctl` is missing, install it in Rescue with `apt-get install -y smartmontools`.
 
 Record these values before continuing. Preflight prints most of them; the commands are listed so you can rerun one in Rescue:
 
@@ -89,7 +92,7 @@ Record these values before continuing. Preflight prints most of them; the comman
 | Rescue boot mode | `BOOT_MODE` in the preflight output; must be BIOS |
 | Desired FQDN, email, timezone | Your choices |
 
-Check mounts, swap, `/proc/mdstat`, and disk holders. A previous Debian installation may have active software RAID even when nothing is mounted. Inspect the affected arrays and stop only those, after approving their destruction. The installer refuses disks with active holders.
+In the preflight output, check the mounts from `findmnt`, the swap from `swapon --show`, the software RAID state in `/proc/mdstat`, and the disk holders in the `lsblk` tree. A clean server shows nothing mounted from the target disks, no swap on them, and no active `md` array. A previous Debian installation may have active software RAID even when nothing is mounted. Inspect the affected arrays and stop only those, after approving their destruction. The installer refuses disks with active holders.
 
 Some rescue systems, including Hetzner's, ship a `zpool` wrapper that installs ZFS on first use. Do not run `zpool` as an inventory command unless ZFS is already loaded. If `/sys/module/zfs` exists, inspect `zpool status -LP`. Review any affected pool before exporting it, and keep it exported while QEMU uses its disks.
 
@@ -128,7 +131,7 @@ Fix any syntax error before proceeding. The line-ending conversion covers every 
 
 ## 4. Fill in the answer and disk settings
 
-Edit both files in Rescue. The example's `192.0.2.10` and `example.com` are documentation values; the builder refuses an answer that still contains them.
+Edit both files in Rescue. The builder refuses an answer that still contains a `REPLACE_WITH_` placeholder or a `192.0.2.` address. It does not check the FQDN or the email, so replace `pve.example.com` and `admin@example.com` yourself.
 
 ```bash
 cd /tmp/proxmox-auto
@@ -136,7 +139,7 @@ vi answer.toml
 vi install.env
 ```
 
-In `answer.toml`, replace the FQDN, contact email, country, timezone, IPv4/prefix, gateway, DNS, and both MAC placeholders. Write the MAC in lowercase. For the physical MAC `02:00:00:00:00:10`, the filter becomes `*020000000010` and the mapping line becomes `"02:00:00:00:00:10" = "nic0"`. The same MAC goes into `install.env` as `NIC_MAC`; the builder checks that all three agree.
+In `answer.toml`, replace the FQDN, contact email, country, timezone, IPv4/prefix, gateway, DNS, and both MAC placeholders. The country is a two-letter code such as `de`; the timezone is an IANA name such as `Europe/Berlin`. Write the MAC in lowercase. For the physical MAC `02:00:00:00:00:10`, the filter becomes `*020000000010` and the mapping line becomes `"02:00:00:00:00:10" = "nic0"`. The same MAC goes into `install.env` as `NIC_MAC`; the builder checks that all three agree.
 
 In `install.env`, set the stable `/dev/disk/by-id/` paths and live serials of both physical disks, and set `GUEST_CIDR` and `GUEST_GATEWAY` to the same values as the answer. Keep `FIRMWARE_MODE=bios`. The answer's `nvme0n1` and `nvme1n1` name the two NVMe controllers inside QEMU, in the order `install.env` lists the disks; they are not copied from the physical device order.
 
@@ -165,7 +168,7 @@ curl -fL --retry 4 --retry-all-errors \
 echo '4e88fe416df9b527624a175f24c9aa07c714d3332afb1ee3dbf3879573ef2c6c  proxmox-ve_9.2-1.iso' | sha256sum -c -
 ```
 
-Expected result: `proxmox-ve_9.2-1.iso: OK`. Check the filename and checksum against the [official download page](https://enterprise.proxmox.com/iso/). If you change versions, update and revalidate the builder, answer schema, and boot workflow together.
+Expected result: `proxmox-ve_9.2-1.iso: OK`. Compare the filename and checksum with the checksum list published in the [official ISO index](https://enterprise.proxmox.com/iso/). If you change versions, update and revalidate the builder, answer schema, and boot workflow together.
 
 ## 6. Build the unattended installer
 
@@ -223,6 +226,8 @@ systemctl show pve-install-qemu -p ActiveState -p SubState -p ExecMainStatus
 python3 /tmp/proxmox-auto/qemu-screen.py
 ```
 
+While the installer runs, the unit shows `SubState=running`, and SSH can stay silent for a long time; the unit state is the signal. Continue only when it reports `SubState=exited` with `ExecMainStatus=0`. `dead` means it never started, and `failed` means read `/tmp/proxmox-auto/install.log` before doing anything else.
+
 Some installer progress appears only on the graphical console. The helper writes `/tmp/proxmox-auto/qemu-screen.ppm` through a private Unix socket; no VNC port is opened. Fetch it from your workstation and open it with any viewer that reads PPM, such as GIMP or IrfanView:
 
 ```bash
@@ -243,7 +248,29 @@ If the installed system works in QEMU but the physical server does not boot, use
 
 Agents read the [root rules](../../AGENTS.md), the [topic rules](AGENTS.md), and the [installation skill](../../skills/install-proxmox-hetzner/SKILL.md). The skill follows this guide's scripts and checkpoints; it is not a second procedure. See [using an AI agent](../../USING-AI.md) for a starting prompt.
 
-Local maintenance checks for this guide are listed in [CONTRIBUTING.md](../../CONTRIBUTING.md#check-the-current-proxmox-guide). The live refusal test, [preflight-refusals.sh](tests/preflight-refusals.sh), runs in Rescue after the ISO is built: copy it into `tests/` beneath the work directory, load the reviewed `install.env` with `set -a`, and run it with Bash. It checks a missing, legacy `YES`, or mismatched erase flag, missing or invalid firmware modes, UEFI, duplicate disks, and a wrong serial. Every invocation forces `CHECK_ONLY=1`; it never launches QEMU.
+Local maintenance checks for this guide are listed in [CONTRIBUTING.md](../../CONTRIBUTING.md#check-the-current-proxmox-guide). The live refusal test, [preflight-refusals.sh](tests/preflight-refusals.sh), runs in Rescue as root after the ISO is built. Stage it from this guide's directory on your workstation:
+
+```bash
+ssh root@SERVER_IP 'install -d -m 0700 /tmp/proxmox-auto/tests'
+scp tests/preflight-refusals.sh root@SERVER_IP:/tmp/proxmox-auto/tests/
+```
+
+Then run it in Rescue with the reviewed environment loaded:
+
+```bash
+(
+set -eu
+cd /tmp/proxmox-auto
+sed -i 's/\r$//' tests/preflight-refusals.sh
+chmod 0700 tests/preflight-refusals.sh
+set -a
+. ./install.env
+set +a
+bash tests/preflight-refusals.sh
+)
+```
+
+It checks that the launcher refuses a missing, legacy `YES`, or mismatched erase flag, a missing, `uefi`, or otherwise invalid `FIRMWARE_MODE`, duplicate disks, and a wrong serial. It ends by accepting the approved configuration in check-only mode, so expect a `PASS` line for every case. Every invocation forces `CHECK_ONLY=1`; it never launches QEMU.
 
 ## References
 

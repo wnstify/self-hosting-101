@@ -1,4 +1,5 @@
 #!/bin/bash
+# Runs automatically on the installed system's first boot, embedded in the prepared ISO. Do not run it by hand.
 set -euo pipefail
 
 # The leading '-' tells sysctl to ignore these keys once ipv6.disable=1 removes them.

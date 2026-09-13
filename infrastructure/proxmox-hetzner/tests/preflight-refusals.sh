@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run in Rescue with a reviewed install.env loaded and an existing INSTALL_ISO.
+# Run in Rescue as root with a reviewed install.env loaded and an existing INSTALL_ISO.
 # Every invocation uses CHECK_ONLY=1; no QEMU process is launched.
 set -euo pipefail
 installer="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/install-qemu.sh"

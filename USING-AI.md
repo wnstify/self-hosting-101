@@ -37,17 +37,19 @@ For the current guide, use `infrastructure/proxmox-hetzner` as `GUIDE_PATH`. A g
 | A linked `skills/.../SKILL.md`, when present | Agent checklist over the same procedure and helpers |
 | `tested-configuration.md`, when present | Recorded results and limits of the tested setup |
 
-Claude Code reads `CLAUDE.md` at the repository root, which imports the root AGENTS.md. Codex reads AGENTS.md directly. If your tool does not load one of these files on its own, tell it to read the file. Tell your agent to install or read the [Proxmox installation skill](skills/install-proxmox-hetzner/SKILL.md) from `skills/`. It will ask whether to install the skill for this project only or globally; either works, and the answer only decides where a small pointer file goes. It needs the repository's scripts even if your tool copies it into its own skills folder, and those tool folders are git-ignored here.
+Claude Code reads `CLAUDE.md` at the repository root, which imports the root AGENTS.md. Codex reads AGENTS.md directly. If your tool does not load one of these files on its own, tell it to read the file.
+
+Tell your agent to install or read the [Proxmox installation skill](skills/install-proxmox-hetzner/SKILL.md) from `skills/`. It will ask whether to install the skill for this project only or globally; either works, and the answer only decides where a small pointer file goes. The skill runs the repository's scripts, so keep your checkout even if your tool copies the skill into its own folder.
 
 ## What you approve
 
 The full rules are in [AGENTS.md](AGENTS.md). For you as the owner, they come down to this:
 
 - Asking for an inspection lets the agent run read-only checks. It does not let it change anything.
-- Destructive steps need your approval for the exact target. For the Proxmox guide that is the server, both disk serials, the storage layout, and the IPv6 policy. The agent asks once and again only if that scope changes.
+- Destructive steps need your approval for the exact target. For the Proxmox guide that is the server, both disk serials, the ZFS mirror layout, and IPv6 disabled in the kernel. The agent asks once and again only if that scope changes.
 - Keep private keys, passwords, populated answer files, and raw logs out of the chat. Use your SSH agent for authentication. Private evidence goes in a `records/` directory at the repository root; Git ignores it, and you create it when you need it.
 - After a timeout or a dropped SSH session, the agent must inspect the current state before retrying. A timeout is not permission to restart an installer.
-- Do not accept an installation as complete until the guide's final checks passed and the agent has told you how you get the root password.
+- Do not accept an installation as complete until the guide's final checks pass and the agent has told you how to retrieve the root password.
 
 ## Maintaining a guide
 

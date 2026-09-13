@@ -1,6 +1,6 @@
 # Verification runner
 
-`verify.py` checks both flavors of every recipe. It needs Docker with Compose, Python 3 with PyYAML, and a login for `dhi.io` when DHI recipes are selected. The commands below run on the workstation or Docker host from the repository root; the script also works from any other directory.
+`verify.py` checks both flavors of every recipe. It needs Docker with Compose, Python 3 with PyYAML, and a `dhi.io` login for Docker Hardened Images when DHI recipes are selected. Run it from anywhere; the paths below assume the repository root.
 
 ## Commands
 
@@ -23,7 +23,7 @@ python3 applications/docker-recipes/verification/verify.py list
 5. GET the probe path and accept the listed status codes.
 6. Scan the logs for error markers, minus the spec's allow list.
 7. Stop, then `up --wait` again, and repeat steps 4 to 6 on the post-restart log segment.
-8. Run the functional hook after step 5 and again after step 7 when the spec names one.
+8. Run the functional hook after step 5 and again after step 7 when the spec names one. No spec defines a hook yet.
 
 `--changed REF` limits the matrix to applications whose recipe or spec differs from REF. `--jobs N` runs recipes in parallel, and the scheduler keeps the summed container memory limits of running recipes under `--memory` megabytes, which defaults to three quarters of the host RAM. `--keep` leaves failed deployments in the working directory for inspection.
 
@@ -41,4 +41,4 @@ A log line counts as an error when it contains `ERROR`, `ERRO`, `FATAL`, `CRITIC
 
 ## Host notes
 
-The working directory must be on disk, not tmpfs. Nextcloud fails to install on a RAM-backed mount. Rootless Docker maps container owners to subordinate ids, so the runner deletes deployment directories through a container rather than with a plain remove.
+The working directory must be on disk, not tmpfs. Nextcloud fails to install on a RAM-backed mount. The runner deletes its own working copies under `--workdir` after each recipe; `--keep` leaves failed ones in place. Rootless Docker maps container owners to subordinate ids, so it deletes them through a container rather than with a plain remove.

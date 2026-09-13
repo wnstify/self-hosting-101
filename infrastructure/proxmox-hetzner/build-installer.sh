@@ -1,4 +1,5 @@
 #!/bin/bash
+# Rescue only. Builds the unattended Proxmox installer ISO from the verified stock ISO.
 set -euo pipefail
 umask 077
 

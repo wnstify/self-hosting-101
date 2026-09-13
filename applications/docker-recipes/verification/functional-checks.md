@@ -1,6 +1,6 @@
 # Additional functional checks
 
-These checks close gaps in the earlier HTTP and container-health tests. They ran on 2026-09-09 against both recipes, using generated credentials and disposable data outside this repository. No public torrents or real user files were used. Result files, state snapshots and logs remain in that directory after test data cleanup.
+These checks close gaps in the earlier HTTP and container-health tests. They ran on 2026-09-09 against both flavors, using generated credentials and disposable data outside this repository. No public torrents or real user files were used. They were run by hand, not through the runner's functional hook, which no spec defines.
 
 | Application | Standard | DHI | Functional evidence |
 | --- | --- | --- | --- |
@@ -12,8 +12,8 @@ qBittorrent's test fixture disabled DHT, peer exchange and local peer discovery 
 
 Navidrome logged the expected first-start warnings about migration scanning and delaying playlist import until an administrator exists. No playlist import or browser audio-device playback was tested. The scan and byte-for-byte stream checks exercise the application and media path. The [pinned authentication source](https://github.com/navidrome/navidrome/blob/v0.63.2/server/auth.go) defines administrator creation and login; the [getting-started guide](https://www.navidrome.org/docs/getting-started/) describes the onboarding and library workflow.
 
-These three DHI folders retain the upstream application images because the recipes have no DHI replacement for them. Both folder variants were exercised separately.
+These three DHI folders retain the upstream application images because the recipes have no DHI replacement for them. Both flavors were exercised separately.
 
-Syncthing used explicit addresses on a temporary local Docker bridge. The fixture disabled global discovery and relays and published peer ports only on loopback. Both devices were registered before connections were enabled. The final pairing sequence produced no unknown-device warnings. Syncthing still warns that container UID 0 is a privileged/system user, although this daemon is rootless. Deliberately stopping either peer produces INFO connection-closure messages with an `error` field such as EOF or `Syncthing is being stopped`. These normal shutdown records remain in the saved logs; a transcript with no occurrence of the word error is not claimed. The [configuration API documentation](https://docs.syncthing.net/rest/config.html) describes the device and folder endpoints used.
+Syncthing used explicit addresses on a temporary local Docker bridge. The fixture disabled global discovery and relays and published peer ports only on loopback. Both devices were registered before connections were enabled. The final pairing sequence produced no unknown-device warnings. Syncthing still warns that container UID 0 is a privileged/system user, although this daemon is rootless. Deliberately stopping either peer produces INFO connection-closure messages with an `error` field such as EOF or `Syncthing is being stopped`. These normal shutdown records remain in the saved logs and contain the word error. The [configuration API documentation](https://docs.syncthing.net/rest/config.html) describes the device and folder endpoints used.
 
 All six final runs retained their result JSON, healthy-state snapshot and complete stop/start logs outside this repository. qBittorrent also retains its internal application log. Test containers, generated media/files, private credentials inside application data, and these three cached application images were removed afterward. The generated `.env` fixtures remain mode 0600 outside the repository. No recipe changes were needed for these functional checks.

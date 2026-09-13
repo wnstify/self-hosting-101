@@ -6,7 +6,7 @@ Use this when the installed system booted in QEMU but the physical server does n
 
 Activate Linux Rescue with the intended SSH key in the provider panel and reset the server. Verify any changed SSH host fingerprint before updating the saved entry. Keep the installed Proxmox host key you captured during verification.
 
-Copy and run `preflight.sh` again with the workstation commands in [installation step 2](README.md#2-collect-the-server-values). Device names can change after a reboot, so identify the approved disks by serial and use their stable by-id paths. Preflight must report `BOOT_MODE=BIOS`. If it reports UEFI, arrange a legacy BIOS boot through the provider console or support before continuing.
+Copy and run `preflight.sh` again with the workstation commands in [installation step 2](README.md#2-collect-the-server-values). Device names can change after a reboot, so identify the approved disks by serial and use their stable by-id paths. Rescue images usually ship `smartctl` and `dmidecode`; if preflight reports one missing, install `smartmontools` or `dmidecode` with `apt-get`. Preflight must report `BOOT_MODE=BIOS`. If it reports UEFI, arrange a legacy BIOS boot through the provider console or support before continuing.
 
 ## Restore the Rescue work directory
 
@@ -50,7 +50,7 @@ In Rescue, run [the shared disk inspection](verification.md#inspect-the-approved
 
 Both disks need BIOS GRUB, a kernel, and an initrd. If a file is missing, record which one and on which disk before changing anything.
 
-Start the installed guest with the verification guide's `pve-verify-qemu` unit and connect with the host key you recorded. Inside the guest, inspect:
+Start the installed guest with the `pve-verify-qemu` unit from [verification step 2](verification.md#2-boot-the-installed-disks-temporarily) and connect through the host key you recorded, as in [verification step 3](verification.md#3-capture-the-installed-host-key-through-trusted-ssh). Inside the guest, inspect:
 
 ```bash
 journalctl --list-boots --no-pager

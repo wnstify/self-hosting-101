@@ -1,16 +1,21 @@
 # Docker Compose recipes
 
-Compose files and environment examples for 22 self-hosted applications, each in two image flavors. They are the source recipes for the application episodes. No per-application guide exists yet; the recipes carry their own instructions in each `.env.example`.
+Compose files and environment examples for 22 self-hosted applications. Each folder is a self-contained Docker Compose deployment: one `compose.yaml` and one `.env.example` whose comments are the instructions. The planned application guides will build on these files.
 
 [Applications](../README.md) · [Episode index](../../episodes/README.md)
 
 | Detail | Value |
 |---|---|
-| Status | Recipe library, no guide yet |
-| Last local check | 2026-09-09, both flavors of all 22 applications, see [the checklist](verification/CHECKLIST.md) |
+| Status | Available |
+| Guide | None yet; the comments in each `.env.example` are the instructions |
+| Last local check | 2026-09-09 on rootless Docker, both flavors of all 22 applications, see [the checklist](verification/CHECKLIST.md) |
 | Live deployment in the series | Not yet |
 
-Each application has a separate Compose file and environment example for each image flavor:
+Three words are used throughout:
+
+- A recipe is one application folder with its Compose file and environment example.
+- A flavor is the image set a recipe uses. `standard` selects upstream images. `dhi` selects Docker Hardened Images from `dhi.io` for the services that have one and keeps upstream images for the rest.
+- `prepare` is a one-shot Compose service in every recipe. It creates the data directories, sets their ownership, and writes the configuration files the other services mount.
 
 ```text
 applications/docker-recipes/
@@ -21,11 +26,18 @@ applications/docker-recipes/
   verification/CHECKLIST.md
 ```
 
-`standard` selects upstream images. `dhi` selects Docker Hardened Images from `dhi.io` for supported services and keeps upstream images for the others. Pulling from `dhi.io` needs a Docker Hub account with access to hardened images; run `docker login dhi.io` before the first pull. Each DHI environment example says which services are hardened. The folder name does not mean every container uses a hardened image.
+## Before you start
+
+- Web ports bind to `127.0.0.1` only. Nothing is reachable from another machine until you put a reverse proxy with TLS in front of the stack. Four recipes publish extra ports on all interfaces because the protocol needs it: qBittorrent's torrent port, Syncthing's sync port, WireGuard's UDP port, and Stoat's voice ports. Open those in the host firewall on purpose.
+- Docker Hardened Images are a paid Docker subscription feature. Pulling from `dhi.io` needs `docker login dhi.io` with an entitled account; without one the pull fails with an authorization error, so use the `standard` folder instead. Eight DHI folders contain no hardened image at all because none exists for that application: freshrss, jellyfin, navidrome, openwebui, qbittorrent, serpbear, syncthing, and wg-adguard. Each DHI environment example says what stays upstream.
+- Three recipes download from the internet on first start, each pinned by version and SHA-256 checksum. Baserow fetches a Gunicorn wheel from PyPI. Zulip fetches a Debian dictionary package and a Pika wheel. Open WebUI fetches about 890 MB of embedding model from Hugging Face. The downloads are cached inside the deployment directory.
+- `prepare` runs as root inside its container and changes ownership only inside the deployment directory. On a rootless Docker daemon, container root is your own account. On a rootful daemon it is real root; the recipes that hold your own files, Jellyfin and Syncthing, say in their environment example how ownership is handled.
+- The local checks ran on a rootless daemon. A rootful daemon has not been tested.
+- Addresses such as `example.com` and `admin@example.com` are documentation values. Replace them.
 
 ## Start an application
 
-Copy the selected application folder to a deployment directory outside this checkout so generated data stays out of Git. Then follow the instructions at the top of its `.env.example`. On the Docker host, from the repository root:
+Copy the chosen recipe to a deployment directory outside this repository so generated data stays out of Git. On the Docker host, from the repository root, with `authentik` replaced by the folder you chose:
 
 ```sh
 mkdir -p ~/deployments
@@ -38,9 +50,9 @@ docker compose up -d --wait
 docker compose ps -a
 ```
 
-Run `prepare` only when the application defines that service. Some applications require additional setup; follow their environment comments. Image pins and flavor-specific defaults live in each Compose file, so no image block needs to be uncommented to select DHI.
+Every command after the copy runs from that deployment directory. Some applications need more setup; the environment example says so. Image pins and flavor-specific defaults live in each Compose file, so nothing needs uncommenting to select DHI.
 
-Use generated secrets. Placeholder API credentials are suitable only for local startup checks where the application supports them. They cannot authenticate external services.
+Use generated secrets; every empty secret has a generator command in the comment above it. Where an example leaves a third-party credential empty, such as Mira's OpenRouter key or Zulip's SMTP password, the stack starts without it and the related feature does not work.
 
 Use an ordered stop and start to restart the whole stack with its existing data:
 
@@ -59,17 +71,17 @@ Do not point two running stacks at the same database or application data. When t
 
 Some recipes initialize application schemas or install a specific runtime fix before starting the app. Downloaded Python wheels and dictionary packages have fixed versions and SHA-256 checks. Generated files are mounted read-only into the application or database. Mira's callback patch also checks the exact original source before changing it.
 
-The batch reports record why each fix exists and when it can be removed. Review these fixes when updating image pins, and repeat the application and restart checks.
+[Batch A](verification/batch-a.md), [Batch B](verification/batch-b.md), and [Batch C](verification/batch-c.md) record why each fix exists and when it can be removed. Review these fixes when updating image pins, and repeat the application and restart checks.
 
 ## Verification
 
-[The checklist](verification/CHECKLIST.md) records both flavors of all applications. The linked batch reports describe the checks performed and any failures or external prerequisites. A completed initializer should exit with code 0; every long-running container must report healthy.
+[The checklist](verification/CHECKLIST.md) records both flavors of all applications. The batch reports linked from it describe the checks performed and any failures or external prerequisites. Every one-shot job, `prepare` and the `*-init` services, should exit with code 0; every long-running container must report healthy.
 
-Maintainers run the checks with the runner in `verification/`. On the workstation or Docker host, from the repository root:
+Maintainers run the checks with the runner in `verification/`. It writes its working copies and results under `~/.cache/docker-recipes-verify/`, outside any deployment directory. On the Docker host, from the repository root:
 
 ```sh
 python3 applications/docker-recipes/verification/verify.py static
 python3 applications/docker-recipes/verification/verify.py run --app authentik
 ```
 
-The static command renders all 44 Compose files and checks matching application folders, image digest pins, healthcheck coverage, loopback port bindings, and that every application has a test spec. The run command starts each selected recipe with generated secrets, checks health, probes the web endpoint, scans logs, restarts the stack, and repeats the checks. Details are in [the verification README](verification/README.md).
+The static command renders all 44 recipes and checks matching application folders, image digest pins, healthcheck coverage, loopback port bindings, and that every application has a test spec. The run command starts each selected recipe with generated secrets, checks health, probes the web endpoint, scans logs, restarts the stack, and repeats the checks. Details are in [the verification README](verification/README.md).

@@ -2,7 +2,7 @@
 
 Continue here after the installer unit finished. Legacy BIOS is required at every boot checkpoint. If a check reports UEFI, stop and arrange a legacy BIOS boot before continuing. Each command block names the machine it runs on.
 
-Workstation commands assume `infrastructure/proxmox-hetzner` is your current directory, as in the [installation guide](README.md). Keep the local `installed-known-hosts` file there; Git ignores it. Private deployment evidence goes in `records/` at the repository root.
+Workstation commands assume `infrastructure/proxmox-hetzner` is your current directory, as in the [installation guide](README.md). Keep the local `installed-known-hosts` file there; Git ignores it. Private deployment evidence goes in `records/` at the repository root; create it if it does not exist, Git ignores it.
 
 ## 1. Check both boot partitions in Rescue
 
@@ -16,13 +16,15 @@ test "$(systemctl show pve-install-qemu -p ExecMainStatus --value)" = 0
 )
 ```
 
+Both `test` lines print nothing on success. A non-zero exit status means one of them failed; run `systemctl show pve-install-qemu -p SubState -p ExecMainStatus` to see which.
+
 This check only works in the Rescue session that ran the installer. After a Rescue reboot the transient unit is gone; follow [inspect a failed boot](boot-recovery.md) to recreate the work directory before using the disk inspection below.
 
 ### Inspect the approved disks
 
 In Rescue, confirm that no QEMU process is using either approved disk. The block below takes the launchers' lock and reruns the shared disk checks, so it refuses to continue while a launcher runs or while a serial, mount, holder, or imported pool does not match. A QEMU process started outside the launchers does not hold that lock; check for it with `pgrep -a qemu` first. Stop on any failed check. Do not import the ZFS pool or start QEMU while a boot partition is mounted.
 
-Each `/dev/disk/by-id/` whole-disk link has a `-part2` link for its boot partition. That is why `install.env` must use by-id paths; a plain `/dev/nvme0n1` value has no `-part2` link and the mount fails. Inspect both read-only:
+Each `/dev/disk/by-id/` whole-disk link has a `-part2` link for its boot partition. That is why `install.env` must use by-id paths; a plain `/dev/nvme0n1` value has no `-part2` link and the mount fails. Inspect both without writing to the disks. `blockdev --rereadpt` makes the kernel re-read each partition table after the installer changed it; it does not modify the disk:
 
 ```bash
 (
@@ -63,9 +65,9 @@ systemd-run --unit=pve-verify-qemu --property=Type=exec --property=RemainAfterEx
   /bin/bash -c 'set -eu; set -a; . /tmp/proxmox-auto/install.env; set +a; umask 077; exec /tmp/proxmox-auto/boot-installed-qemu.sh > /tmp/proxmox-auto/verify-boot.log 2>&1'
 ```
 
-This boots the disks without the installer ISO, reusing the disk-identity checks and legacy BIOS. It needs no erase flag. SSH is forwarded to `127.0.0.1:2222` on Rescue only. If you need to start the guest a second time in the same Rescue session, run `systemctl stop pve-verify-qemu` first so the unit name is free.
+This boots the disks without the installer ISO, reusing the disk-identity checks and legacy BIOS. It needs no erase flag. SSH is forwarded to `127.0.0.1:2222` on Rescue only. If you need to start the guest a second time in the same Rescue session, run `systemctl stop pve-verify-qemu` first so the unit name is free; a finished unit stays loaded because of `RemainAfterExit=yes`. A failed unit needs `systemctl reset-failed pve-verify-qemu` instead.
 
-Wait for the guest to boot. Inspect `pve-verify-qemu.service` and use `qemu-screen.py` if SSH does not become available.
+Wait for the guest to boot. In Rescue, `ss -lnt | grep 2222` shows the forward once QEMU is up, and the keyscan in step 3 answers once SSH inside the guest is up. If nothing answers after several minutes, inspect `pve-verify-qemu.service` and capture the screen with `python3 /tmp/proxmox-auto/qemu-screen.py`.
 
 The Proxmox login banner prints a GUI address on the server's public IP. Ignore it; after step 5 the GUI listens on localhost only and you reach it through the SSH tunnel in step 8.
 
@@ -115,7 +117,7 @@ if test -f /etc/default/grub.d/90-disable-ipv6.cfg; then cat /etc/default/grub.d
 systemctl show proxmox-first-boot -p Result -p ExecMainStatus
 systemctl is-active pve-cluster pvedaemon pveproxy pvestatd
 curl -kfsS -o /dev/null -w '%{http_code}\n' https://127.0.0.1:8006/
-getent ahostsv4 enterprise.proxmox.com
+getent ahostsv4 download.proxmox.com
 timedatectl status
 )
 ```
@@ -209,7 +211,14 @@ ip -4 route
 
 Require `PHYSICAL_BOOT=BIOS`. If it reports UEFI, stop and correct the boot setting through the provider console before continuing. Confirm the intended address and gateway, both disks online, and `ipv6.disable=1` in the running kernel command line.
 
-Once verified, add the captured key to your normal known-hosts file. `ssh-keygen -R SERVER_IP` removes only the old entry for this address; then append the verified line from `installed-known-hosts` to `~/.ssh/known_hosts`. Plain `ssh root@SERVER_IP` works after that.
+Once verified, add the captured key to your normal known-hosts file. On the workstation:
+
+```bash
+ssh-keygen -R SERVER_IP
+grep 'pve-install-guest,' installed-known-hosts >> ~/.ssh/known_hosts
+```
+
+The first command removes only the old Rescue entry for this address. Plain `ssh root@SERVER_IP` works after that.
 
 From the workstation, copy the update and single-node scripts onto the installed host:
 
@@ -243,7 +252,7 @@ chmod 0700 /root/configure-single-node.sh
 /root/configure-single-node.sh
 ```
 
-Expect three lines saying each service is stopped and disabled, then `Single-node configuration complete.` Re-enable them with `systemctl enable --now pve-ha-lrm pve-ha-crm corosync` before you join this host to a cluster.
+Expect three lines saying each service is stopped and disabled, then `Single-node configuration complete.` On a rerun each line reads `is already stopped and disabled`; both are success. Re-enable them with `systemctl enable --now pve-ha-lrm pve-ha-crm corosync` before you join this host to a cluster.
 
 The script also removes the subscription reminder from the GUI, but only when you ask for it:
 
@@ -258,6 +267,8 @@ Check time synchronization on the physical Proxmox host. If `timedatectl show -p
 ```bash
 chronyd -Q -t 10 -f /dev/null 'server ntp1.hetzner.de iburst'
 ```
+
+Expect a line such as `System clock wrong by 0.000123 seconds`. No such line, or a timeout, means the server did not answer.
 
 If this succeeds while the default sources stay unreachable, add your provider's time servers to the existing Chrony configuration. The block uses [Hetzner's documented NTP servers](https://docs.hetzner.com/robot/dedicated-server/security/ntp-servers/). On the physical Proxmox host:
 
@@ -275,7 +286,7 @@ systemctl restart chrony
 )
 ```
 
-Allow time for replies, then require `NTPSynchronized=yes` and a selected source marked `^*` in `chronyc -n sources`. If no time server answers, investigate DNS and network filtering. This fallback was needed in the Hetzner AX41 test.
+Wait about a minute, then require `NTPSynchronized=yes` and a selected source marked `^*` in `chronyc -n sources`. If no time server answers, investigate DNS and network filtering. This fallback was needed in the Hetzner AX41 test.
 
 After the update and time checks pass, reboot the physical Proxmox host:
 
@@ -313,7 +324,7 @@ systemctl is-active pve-cluster pvedaemon pveproxy pvestatd
 systemctl is-enabled pve-ha-lrm pve-ha-crm corosync || true
 systemctl --failed --no-pager
 curl -kfsS -o /dev/null -w '%{http_code}\n' https://127.0.0.1:8006/
-getent ahostsv4 enterprise.proxmox.com
+getent ahostsv4 download.proxmox.com
 timedatectl status
 apt-get -s full-upgrade
 )
@@ -338,4 +349,4 @@ ssh root@SERVER_IP 'cat /root/proxmox-initial-password'
 
 Save it in your password manager, set your preferred root password with `passwd`, and remove the file after confirming access. Keep passwords out of recordings and screenshots.
 
-The chosen FQDN does not create a public DNS record or configure Pangolin. Those are separate tasks.
+The chosen FQDN does not create a public DNS record or publish the GUI through a reverse proxy. Those are separate tasks.

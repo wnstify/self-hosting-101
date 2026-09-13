@@ -1,4 +1,5 @@
 #!/bin/bash
+# Rescue only. ERASES both approved disks and runs the unattended Proxmox installer in QEMU.
 set -euo pipefail
 umask 077
 

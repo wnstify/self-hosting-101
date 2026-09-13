@@ -7,6 +7,7 @@ import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+# Git Bash first on Windows, because System32\bash.exe is WSL and cannot run repository paths.
 GIT_BASH = Path('C:/Program Files/Git/bin/bash.exe')
 BASH = str(GIT_BASH) if os.name == 'nt' and GIT_BASH.exists() else shutil.which('bash')
 
@@ -18,6 +19,7 @@ class FirmwarePolicyTests(unittest.TestCase):
         for name in ('FIRMWARE_MODE', 'GUEST_CIDR', 'GUEST_GATEWAY'):
             env.pop(name, None)
         # Valid BIOS stops at approval/root/network checks, before any disk access.
+        # Any value other than the two approved serials is refused; NO is just a visibly wrong one.
         env.update(ERASE_CONFIRMED='NO', CHECK_ONLY='1')
         if mode is not None:
             env['FIRMWARE_MODE'] = mode

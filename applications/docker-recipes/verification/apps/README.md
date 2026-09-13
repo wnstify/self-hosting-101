@@ -19,10 +19,11 @@ set:                      # Replace any variable, empty or not, after ports are 
 derive:                   # Bash run after generation with every .env value exported.
   - 'echo "HASH=$(printf %s "$ADMIN_PASSWORD" | sha256sum | cut -c1-64)"'
                           # Each stdout line KEY=VALUE is merged into .env.
+                          # cut drops sha256sum's trailing filename field.
 allow:                    # Log lines containing `text` are not counted as errors.
   - text: vm.overcommit_memory
     why: Redis warns on hosts without overcommit. Recorded in batch-a.md.
-functional: functional/qbittorrent.sh   # Optional hook, relative to verification/. No spec uses one yet.
+functional: functional/qbittorrent.sh   # Optional hook, relative to verification/. No spec defines one yet and the directory does not exist.
 public_ports: [syncthing]  # Services allowed to publish ports on all interfaces.
 port_ranges: [[VOICE_UDP_START, VOICE_UDP_END]]  # Variable pairs that must stay a range.
 ```

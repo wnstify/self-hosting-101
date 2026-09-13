@@ -8,8 +8,8 @@ One bare-metal server instead of a fleet of cloud VMs, running trusted open sour
 
 - Proxmox VE on a ZFS mirror as the host.
 - AdGuard Home as the DNS server for every guest.
-- Netbird for the private network: SSH to the host and guests, and a route to the private subnet from your own machine. The hosted control plane, with self-hosting as the fallback.
-- A self-hosted Pangolin instance on a small VPS as the public entry point: TLS, access rules, IP allowlists, and CrowdSec in front of every published app, including the Proxmox GUI.
+- [Netbird](https://netbird.io), a WireGuard-based private network: SSH to the host and guests, and a route to the private subnet from your own machine. It uses Netbird's hosted control plane; self-hosting that is the fallback.
+- A self-hosted [Pangolin](https://github.com/fosrl/pangolin) instance on a small VPS as the public entry point. Pangolin is a tunneled reverse proxy. It terminates TLS and puts access rules, IP allowlists, and [CrowdSec](https://www.crowdsec.net) blocking in front of every published app, including the Proxmox GUI.
 - Backups before the second application.
 
 Every app gets one of three tiers before it is installed: admin surfaces on the private network only, personal apps behind Pangolin with authentication, public sites behind Pangolin without it.
@@ -23,15 +23,15 @@ You can type every command yourself, or hand a guide to an AI agent with the [st
 | # | Topic | Guide | Video |
 |---|---|---|---|
 | 1 | Prerequisites: password manager with an SSH agent and an ed25519 key, a domain, a Netbird account and client, a self-hosted Pangolin VPS, and setting up the agent with this repository | Planned, as separate guides under security and networking | Planned, one video with chapters |
-| 2 | [Proxmox on bare metal](infrastructure/proxmox-hetzner/README.md) | Available, see [tested configuration](infrastructure/proxmox-hetzner/tested-configuration.md) | Recording |
-| 3 | Single node and guest networking: SDN zone with a private subnet, address plan, host firewall | Planned | Planned |
+| 2 | [Proxmox on bare metal](infrastructure/proxmox-hetzner/README.md) | Available. See the [tested configuration](infrastructure/proxmox-hetzner/tested-configuration.md) | Recording |
+| 3 | Single node and guest networking: a Proxmox SDN zone with a private subnet, address plan, host firewall | Planned | Planned |
 | 4 | AdGuard Home as the first guest: DNS for all guests, encrypted upstream, start order, internal name resolution | Planned | Planned |
 | 5 | Netbird on the host: route to the private subnet, SSH over the private network, public ports closed with the provider console as the way back in | Planned | Planned |
-| 6 | Pangolin connection: Newt in a container, first published app, Proxmox GUI behind Pangolin with access rules and CrowdSec | Planned | Planned |
+| 6 | Pangolin connection: Newt, Pangolin's tunnel client, in a container, first published app, Proxmox GUI behind Pangolin with access rules and CrowdSec | Planned | Planned |
 | 7 | Backups: destination, schedule, and a restore on camera | Planned | Planned |
 | 8 onward | Applications, one per episode, each assigned a tier before installation, built on the [Compose recipes](applications/docker-recipes/README.md) | Planned | Planned |
 
-Somewhere in the middle, one episode where something breaks and gets recovered. A failed boot, a lost Pangolin VPS, or a wrong firewall rule.
+Somewhere in the middle I want one episode where something breaks and gets recovered. A failed boot, a lost Pangolin VPS, or a wrong firewall rule.
 
 ## Decisions so far
 
