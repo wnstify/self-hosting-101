@@ -15,8 +15,8 @@ This repository goes with my YouTube series on secure self-hosting. Each video g
 | Topic | Covers | Available guides |
 |---|---|---|
 | [Infrastructure](infrastructure/README.md) | Servers, virtualization, storage, container hosts | [Proxmox on bare metal](infrastructure/proxmox-hetzner/README.md) |
-| [Networking](networking/README.md) | DNS, routing, private networks, reverse proxies, TLS | Planned |
-| [Security](security/README.md) | SSH, firewalls, access control, MFA, secrets | Planned |
+| [Networking](networking/README.md) | DNS, routing, private networks, reverse proxies, TLS | Draft: [Self-hosted NetBird server](networking/netbird-selfhosted/README.md) |
+| [Security](security/README.md) | SSH, firewalls, access control, MFA, secrets | Draft: [Harden a Debian 13 VPS](security/debian-vps-hardening/README.md) |
 | [Applications](applications/README.md) | Installation and maintenance of individual apps | Planned. [Compose recipes](applications/docker-recipes/README.md) are available; no guide yet |
 | [Backups](backups/README.md) | Backup storage, retention, restore tests, disaster recovery | Planned |
 | [Operations](operations/README.md) | Monitoring, alerts, logs, updates, troubleshooting | Planned |

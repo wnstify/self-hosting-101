@@ -85,3 +85,16 @@ for script in infrastructure/proxmox-hetzner/*.sh infrastructure/proxmox-hetzner
 ```
 
 The live refusal test, `infrastructure/proxmox-hetzner/tests/preflight-refusals.sh`, runs in Rescue and is described in the [installation guide](infrastructure/proxmox-hetzner/README.md#agent-instructions).
+
+## Check the VPS hardening and self-hosted NetBird scripts
+
+These local tests need Bash and `ssh-keygen`. They touch no server and make no network request. Run them on the workstation from the repository root:
+
+```bash
+bash security/debian-vps-hardening/tests/test-lib.sh
+bash networking/netbird-selfhosted/tests/test-local.sh
+for script in security/debian-vps-hardening/*.sh security/debian-vps-hardening/tests/*.sh networking/netbird-selfhosted/*.sh networking/netbird-selfhosted/tests/*.sh; do bash -n "$script"; done
+```
+
+The first checks user names, SSH sources, port lists and public-key detection. The second checks domain and email validation, the pinned installer checksum's format, and that `install-netbird.sh` refuses a placeholder email, a missing email and an unpinned version before downloading anything.
+
