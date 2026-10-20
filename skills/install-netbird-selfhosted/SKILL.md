@@ -17,7 +17,7 @@ Before connecting to anything, ask the owner all of these in one message, and wa
 
 1. **Cloud or self-hosted?** Confirm self-hosting, and that the server keeps SSH and three NetBird ports open.
 2. **Browser steps done?** The server exists with their SSH key, the cloud firewall from guide step 1 is attached, and the A record (DNS only on Cloudflare) points at it.
-3. **Server address and domain.** The server's public IPv4 address and the NetBird name, such as `netbird.your-domain.com`.
+3. **Server IP and domain.** Ask for the server's public IPv4 address as shown in their provider's console, and the NetBird name, such as `netbird.your-domain.com`. Do not take the address from DNS or an earlier run; you compare DNS against it in checkpoint 2.
 4. **Let's Encrypt email.** An address on a real domain.
 5. **Admin user name** to create on the server.
 6. **Sudo mode.** Passwordless (fine when the key needs approval each use, such as a password-manager SSH agent or a hardware key) or with a password (for a plain key file). With a password, the owner sets it in the root session.

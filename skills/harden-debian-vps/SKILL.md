@@ -13,7 +13,7 @@ Supported: Debian 13 on a VPS with IPv4, a key added at server creation, root SS
 
 Before connecting, ask the owner all of these in one message and wait for the answers. Skip any already answered in the conversation, for example when the NetBird skill called this one. Do not stop for input again afterwards.
 
-1. **Server address**, and that they created it with their SSH key.
+1. **Server IP**, as shown in their provider's console (not taken from DNS or an earlier run), and that they created the server with their SSH key.
 2. **Admin user name** to create.
 3. **Sudo mode:** passwordless or with a password, with the one-sentence trade-off from the guide.
 4. **SSH source:** anyone, or only a fixed IPv4 address.
