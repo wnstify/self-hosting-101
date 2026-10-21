@@ -90,6 +90,17 @@ fetch_installer() {
   echo "$path"
 }
 
+# Whether a child process is still running. The installer runs under sudo, so
+# the child is root's for most of its life, and "kill -0" from the admin user
+# then fails with "Operation not permitted" during sudo's start-up, which a
+# poll took for "exited" and closed the installer's input (first live run,
+# 2026-10-21). A zombie counts as exited; the caller reaps it with wait.
+child_running() {
+  local state
+  state="$(ps -o stat= -p "$1" 2>/dev/null | tr -d ' ')"
+  [[ -n "$state" && "$state" != Z* ]]
+}
+
 # Run the installer with sudo and answer its questions one at a time.
 #
 #   run_answered LOG DIR "pattern|answer" ... -- installer args
@@ -146,7 +157,7 @@ run_answered() {
         info "Skipped (not asked): $pat"
         break
       fi
-      if ! kill -0 "$pid" 2>/dev/null; then
+      if ! child_running "$pid"; then
         exec 3>&-
         wait "$pid"
         return 2

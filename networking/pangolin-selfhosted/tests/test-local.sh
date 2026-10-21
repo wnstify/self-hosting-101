@@ -49,6 +49,14 @@ if [[ $rc -eq 2 && "$out" == *usage* ]]; then ok "ban-test.sh needs a target and
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
+# child_running: a live child, then the same child as a zombie (exited, not yet
+# reaped), which must count as exited.
+sleep 5 & zpid=$!
+expect ok      "child_running sees a live child"    child_running "$zpid"
+kill "$zpid"; sleep 0.2
+expect refused "child_running sees a zombie as exited" child_running "$zpid"
+wait "$zpid" 2>/dev/null
+
 # run_answered against a fake installer that asks like the real one in plain
 # prompt mode: a question without a newline, then one line from stdin.
 cat > "$work/fake-installer" <<'FAKE'

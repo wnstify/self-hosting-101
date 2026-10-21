@@ -54,6 +54,12 @@ Two bugs found and fixed during this run, both before the installer changed anyt
 
 Not verified in this run: reboot persistence and the padlock in the owner's browser. The `crowdsec` container publishes `6060/tcp` on all interfaces; Docker bypasses ufw, so the cloud firewall is what keeps it closed.
 
+## Scripted run, 2026-10-21, third fresh server
+
+Same setup as the second run (Debian 13.6 x86_64, 1921 MB RAM, agent over SSH, passwordless sudo). Hardening, preflight, Docker 29.9.2, `install-pangolin.sh` and the admin account passed as before.
+
+`install-crowdsec.sh` failed on its first run: the installer printed its two questions and finished 25 ms after it started, with CrowdSec not installed and `/opt/pangolin` unchanged. The stack stayed down until `docker compose up -d`. The cause was in the answer runner, not the installer: it checked whether the installer was still alive with `kill -0` on the `sudo` process, and from the admin user that fails with "Operation not permitted" while sudo is starting up, because the process is root's by then. The runner took the failure for "exited" and closed the installer's input, so the installer read end-of-file and took every default. It only happens when the first poll lands before the installer prints its first question, which a fake installer under root sudo reproduced in about 3 runs out of 100. The runner now checks the process state with `ps` instead (`child_running` in `lib.sh`), which passed 200 runs out of 200 the same way. The second real run, which happened to start the installer a second later, passed: four answers, the three changes, `verify.sh` 16 `PASS`, and the ban test from the workstation.
+
 ## Scripts
 
 Local checks, `tests/test-local.sh`: domain and email validation, the pinned checksum's format, the refusals of both install scripts before any download, the answer runner against a fake installer (answer order, a skipped optional question, an unexpected question stopping the run), the setup token kept out of log excerpts, and the three CrowdSec changes on synthetic files, including the refusals for a custom trusted-proxy list, a placeholder bouncer key and a missing access log.
