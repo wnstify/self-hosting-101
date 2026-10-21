@@ -49,6 +49,10 @@ What passed:
 
 Local checks: `bash -n` on every script, and `tests/test-local.sh` (name and email validation, the pinned checksum's format, and the installer refusing a placeholder email, a missing email and an unpinned version before any download).
 
+## Changes since
+
+- 2026-10-21: `install-docker.sh` moved to `shared/docker/` because the Pangolin guide uses it too. Its content is unchanged apart from defining its two helper functions itself instead of sourcing `lib.sh`. Steps 4 and 6 copy and run it from there. Not retested live.
+
 ## Not tested
 
 - A reboot of the server, and STUN (3478/udp) reachability from a client.

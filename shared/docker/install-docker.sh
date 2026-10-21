@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Install Docker Engine with the Compose plugin from Docker's own repository,
-# plus jq and curl. Runs on the server with sudo.
+# plus jq and curl. Runs on the server with sudo. Used by the self-hosted
+# NetBird and Pangolin guides.
 #
 #   sudo DOCKER_USER=alice ./install-docker.sh
 #
@@ -9,9 +10,14 @@
 # Log out and back in afterwards for the group to apply.
 set -euo pipefail
 
-here="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck source=lib.sh
-. "$here/lib.sh"
+die() {
+  echo "ERROR: $*" >&2
+  exit 1
+}
+
+info() {
+  echo "==> $*"
+}
 
 [[ "$(id -u)" -eq 0 ]] || die "Run with sudo."
 # shellcheck disable=SC1091

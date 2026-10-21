@@ -87,10 +87,10 @@ Expected: `verify-ssh.sh` passed, and ufw allows 22/tcp, 80/tcp, 443/tcp and 347
 
 ## 4. Copy this guide's scripts (workstation)
 
-From the repository root, replacing `alice` with your admin user:
+From the repository root, replacing `alice` with your admin user. The Docker installer is shared with the Pangolin guide and lives in `shared/docker`:
 
 ```bash
-scp -r networking/netbird-selfhosted alice@netbird.your-domain.com:~/
+scp -r networking/netbird-selfhosted shared/docker alice@netbird.your-domain.com:~/
 ```
 
 ## 5. Run the preflight (server)
@@ -106,7 +106,7 @@ It changes nothing. It checks Debian 13 on x86_64, about 2 GB of memory, free di
 ## 6. Install Docker (server)
 
 ```bash
-sudo DOCKER_USER=alice ./install-docker.sh
+sudo DOCKER_USER=alice ~/docker/install-docker.sh
 exit
 ```
 

@@ -25,7 +25,7 @@ work, and keep credentials and private logs out of chat and git.
 Report what passed, what failed, and what remains unverified.
 ```
 
-For the Proxmox guide, use `infrastructure/proxmox-hetzner` as `GUIDE_PATH`; for a self-hosted NetBird server, `networking/netbird-selfhosted`. For the self-hosted NetBird guide you still create the server and the DNS record in your browser; the agent takes over from the first SSH login. A good first task is: "Check whether my server fits this installation guide. Do not install anything."
+For the Proxmox guide, use `infrastructure/proxmox-hetzner` as `GUIDE_PATH`; for a self-hosted Pangolin server, `networking/pangolin-selfhosted`; for a self-hosted NetBird server, `networking/netbird-selfhosted`. For the Pangolin and NetBird guides you still create the server and the DNS records in your browser; the agent takes over from the first SSH login. For Pangolin you also create the admin account yourself, with a setup token the agent tells you how to read. A good first task is: "Check whether my server fits this installation guide. Do not install anything."
 
 ## Shared instructions
 
@@ -39,7 +39,7 @@ For the Proxmox guide, use `infrastructure/proxmox-hetzner` as `GUIDE_PATH`; for
 
 Claude Code reads `CLAUDE.md` at the repository root, which imports the root AGENTS.md. Codex reads AGENTS.md directly. If your tool does not load one of these files on its own, tell it to read the file.
 
-Tell your agent to install or read the matching skill from `skills/`: [Proxmox installation](skills/install-proxmox-hetzner/SKILL.md), [Debian VPS hardening](skills/harden-debian-vps/SKILL.md), or [self-hosted NetBird](skills/install-netbird-selfhosted/SKILL.md). It will ask whether to install the skill for this project only or globally; either works, and the answer only decides where a small pointer file goes. The skill runs the repository's scripts, so keep your checkout even if your tool copies the skill into its own folder.
+Tell your agent to install or read the matching skill from `skills/`: [Proxmox installation](skills/install-proxmox-hetzner/SKILL.md), [Debian VPS hardening](skills/harden-debian-vps/SKILL.md), [self-hosted Pangolin](skills/install-pangolin-selfhosted/SKILL.md), or [self-hosted NetBird](skills/install-netbird-selfhosted/SKILL.md). It will ask whether to install the skill for this project only or globally; either works, and the answer only decides where a small pointer file goes. The skill runs the repository's scripts, so keep your checkout even if your tool copies the skill into its own folder.
 
 ## What you approve
 

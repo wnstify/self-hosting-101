@@ -9,7 +9,7 @@ One bare-metal server instead of a fleet of cloud VMs, running trusted open sour
 - Proxmox VE on a ZFS mirror as the host.
 - AdGuard Home as the DNS server for every guest.
 - [NetBird](https://netbird.io), a WireGuard-based private network: SSH to the host and guests, and a route to the private subnet from your own machine. You choose NetBird Cloud (the series default, and what I run) or a [self-hosted NetBird server](networking/netbird-selfhosted/README.md). A self-hosted one runs alone on its own small VPS.
-- A self-hosted [Pangolin](https://github.com/fosrl/pangolin) instance on its own small VPS as the public entry point. Pangolin is a tunneled reverse proxy. It terminates TLS and puts access rules, IP allowlists, and [CrowdSec](https://www.crowdsec.net) blocking in front of every published app, including the Proxmox GUI.
+- A [self-hosted Pangolin](networking/pangolin-selfhosted/README.md) instance on its own small VPS as the public entry point. Pangolin is a tunneled reverse proxy. It terminates TLS and puts access rules, IP allowlists, and [CrowdSec](https://www.crowdsec.net) blocking in front of every published app, including the Proxmox GUI.
 - Backups before the second application.
 
 Every app gets one of three tiers before it is installed: admin surfaces on the private network only, personal apps behind Pangolin with authentication, public sites behind Pangolin without it.
@@ -22,8 +22,8 @@ You can type every command yourself, or hand a guide to an AI agent with the [st
 
 | # | Topic | Guide | Video |
 |---|---|---|---|
-| 1 | Prerequisites: password manager with an SSH agent and an ed25519 key, a domain, a NetBird Cloud account and client (or a self-hosted server, episode 3), a self-hosted Pangolin VPS, and setting up the agent with this repository | Planned, as separate guides under security and networking | Planned, one video with chapters |
-| 2 | [Proxmox on bare metal](infrastructure/proxmox-hetzner/README.md) | Available. See the [tested configuration](infrastructure/proxmox-hetzner/tested-configuration.md) | Recording |
+| 1 | [Proxmox on bare metal](infrastructure/proxmox-hetzner/README.md) | Available. See the [tested configuration](infrastructure/proxmox-hetzner/tested-configuration.md) | Recording |
+| 2 | [Self-hosted Pangolin](networking/pangolin-selfhosted/README.md): the public entry point on its own hardened Debian 13 VPS, Pangolin's installer pinned and checksummed, CrowdSec with three changed defaults and a ban test | Draft until the scripts' live run. See the [tested configuration](networking/pangolin-selfhosted/tested-configuration.md) | Recording |
 | 3 | [Self-hosted NetBird](networking/netbird-selfhosted/README.md): Cloud or self-hosted, a hardened Debian 13 VPS, NetBird's installer pinned and checksummed | Available. See the [tested configuration](networking/netbird-selfhosted/tested-configuration.md) | Recording |
 | 4 | Single node and guest networking: a Proxmox SDN zone with a private subnet, address plan, host firewall | Planned | Planned |
 | 5 | AdGuard Home as the first guest: DNS for all guests, encrypted upstream, start order, internal name resolution | Planned | Planned |
