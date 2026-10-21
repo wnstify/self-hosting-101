@@ -1,13 +1,13 @@
 # Harden a Debian 13 VPS
 
-Turn a fresh Debian 13 VPS into a server you log in to with a key only: an admin user with sudo, no root login over SSH, no passwords, a host firewall, and automatic security updates. People and AI agents follow the same scripts and checks. The NetBird and Pangolin servers in this series start from here.
+Turn a fresh Debian 13 VPS into a server you log in to with a key only: an admin user with sudo, no root login over SSH, no passwords, a host firewall, and automatic security updates. People and AI agents follow the same scripts and checks. The [Pangolin](../../networking/pangolin-selfhosted/README.md) and [NetBird](../../networking/netbird-selfhosted/README.md) servers in this series start from here.
 
 [Security](../README.md) · [Episode index](../../episodes/README.md)
 
 | Detail | Value |
 |---|---|
 | Status | Available. See the [tested configuration](tested-configuration.md) |
-| Video | Recording, as part of the [self-hosted NetBird](../../networking/netbird-selfhosted/README.md) episode |
+| Video | Recording, as part of the [self-hosted Pangolin](../../networking/pangolin-selfhosted/README.md) (episode 2) and [self-hosted NetBird](../../networking/netbird-selfhosted/README.md) (episode 3) episodes |
 | Last live test | 2026-10-20, Hetzner CPX12, Debian 13: the scripts on a fresh server and the same steps by hand. See [tested configuration](tested-configuration.md) |
 | Materials | None yet |
 

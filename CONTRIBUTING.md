@@ -23,7 +23,7 @@ category/topic/
   ...scripts and example configuration
 ```
 
-Create optional directories only when there is something to put in them. Keep helpers in the layout their commands and tests expect. Move reusable code into a shared location only when more than one guide needs it.
+Create optional directories only when there is something to put in them. Keep helpers in the layout their commands and tests expect. Move reusable code into [`shared/`](shared/README.md) only when more than one guide needs it, and list it in that index.
 
 The root `skills/` directory holds agent checklists. Each skill must locate its companion topic directory and use the same scripts as the guide. Tool-specific folders such as `.claude/`, `.codex/`, and `.agents/` are local and git-ignored; a user tells their agent to install the skill from `skills/`. A root `records/` directory is git-ignored; create it for private deployment evidence.
 
@@ -86,15 +86,18 @@ for script in infrastructure/proxmox-hetzner/*.sh infrastructure/proxmox-hetzner
 
 The live refusal test, `infrastructure/proxmox-hetzner/tests/preflight-refusals.sh`, runs in Rescue and is described in the [installation guide](infrastructure/proxmox-hetzner/README.md#agent-instructions).
 
-## Check the VPS hardening and self-hosted NetBird scripts
+## Check the VPS hardening, self-hosted NetBird and self-hosted Pangolin scripts
 
 These local tests need Bash and `ssh-keygen`. They touch no server and make no network request. Run them on the workstation from the repository root:
 
 ```bash
 bash security/debian-vps-hardening/tests/test-lib.sh
 bash networking/netbird-selfhosted/tests/test-local.sh
-for script in security/debian-vps-hardening/*.sh security/debian-vps-hardening/tests/*.sh networking/netbird-selfhosted/*.sh networking/netbird-selfhosted/tests/*.sh; do bash -n "$script"; done
+bash networking/pangolin-selfhosted/tests/test-local.sh
+for script in security/debian-vps-hardening/*.sh security/debian-vps-hardening/tests/*.sh networking/netbird-selfhosted/*.sh networking/netbird-selfhosted/tests/*.sh networking/pangolin-selfhosted/*.sh networking/pangolin-selfhosted/tests/*.sh shared/docker/*.sh; do bash -n "$script"; done
 ```
 
 The first checks user names, SSH sources, port lists and public-key detection. The second checks domain and email validation, the pinned installer checksum's format, and that `install-netbird.sh` refuses a placeholder email, a missing email and an unpinned version before downloading anything.
+
+The third does the same for the Pangolin scripts, then runs the installer's answer runner against a fake installer (answers in order, a skipped optional question, an unexpected question stopping the run) and the three CrowdSec changes on synthetic files, including the cases where the script must refuse.
 

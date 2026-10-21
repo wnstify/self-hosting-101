@@ -15,7 +15,7 @@ The scripts changed after that live test. The tested configuration lists which c
 
 ## What this guide does
 
-You end up with Proxmox VE 9 on a two-NVMe ZFS mirror, a static IPv4 address pinned to the physical NIC, IPv6 disabled, key-only SSH, the web GUI on localhost only, the cluster services turned off, and all updates applied. Guests, a reverse proxy, and Pangolin, the tunneled reverse proxy planned for a later episode, are out of scope here.
+You end up with Proxmox VE 9 on a two-NVMe ZFS mirror, a static IPv4 address pinned to the physical NIC, IPv6 disabled, key-only SSH, the web GUI on localhost only, the cluster services turned off, and all updates applied. Guests, a reverse proxy, and [Pangolin](../../networking/pangolin-selfhosted/README.md), the tunneled reverse proxy from episode 2, are out of scope here.
 
 Everything the guide configures comes from the scripts in this directory. You do not need a third-party post-install script on top; [verification and first boot](verification.md) covers the repository switch, updates, and the single-node cleanup.
 

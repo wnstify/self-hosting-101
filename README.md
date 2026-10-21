@@ -15,7 +15,7 @@ This repository goes with my YouTube series on secure self-hosting. Each video g
 | Topic | Covers | Available guides |
 |---|---|---|
 | [Infrastructure](infrastructure/README.md) | Servers, virtualization, storage, container hosts | [Proxmox on bare metal](infrastructure/proxmox-hetzner/README.md) |
-| [Networking](networking/README.md) | DNS, routing, private networks, reverse proxies, TLS | [Self-hosted NetBird server](networking/netbird-selfhosted/README.md) |
+| [Networking](networking/README.md) | DNS, routing, private networks, reverse proxies, TLS | [Self-hosted NetBird server](networking/netbird-selfhosted/README.md), [self-hosted Pangolin server](networking/pangolin-selfhosted/README.md) |
 | [Security](security/README.md) | SSH, firewalls, access control, MFA, secrets | [Harden a Debian 13 VPS](security/debian-vps-hardening/README.md) |
 | [Applications](applications/README.md) | Installation and maintenance of individual apps | Planned. [Compose recipes](applications/docker-recipes/README.md) are available; no guide yet |
 | [Backups](backups/README.md) | Backup storage, retention, restore tests, disaster recovery | Planned |
@@ -25,11 +25,11 @@ This repository goes with my YouTube series on secure self-hosting. Each video g
 
 [Install Proxmox VE on a bare-metal server](infrastructure/proxmox-hetzner/README.md) covers legacy BIOS, a two-NVMe ZFS mirror, base networking, updates, and verification. It works on any bare-metal server whose provider offers a Debian-based rescue system with KVM; Hetzner is recommended because that is where I tested it. It erases both selected disks. The last live test ran on a Hetzner AX41 on 2026-09-07; the [tested configuration](infrastructure/proxmox-hetzner/tested-configuration.md) lists what passed, what changed since, and what was not tested.
 
-The Proxmox video is still being recorded. It is episode 2; the prerequisites video comes first. Links appear in the episode index at publication.
+The Proxmox video is still being recorded. It is episode 1, followed by Pangolin and NetBird. Links appear in the episode index at publication.
 
 ## How the repository is organized
 
-Each topic directory holds its guide, scripts, tests, and images. Documents, slides, and downloads go in that topic's `materials/` directory, each labeled with the guide revision it follows. There are no materials yet. The Markdown guide is always the maintained version; a PDF or an older video may show an earlier workflow.
+Each topic directory holds its guide, scripts, tests, and images. Helpers that several guides use live in [`shared/`](shared/README.md). Documents, slides, and downloads go in that topic's `materials/` directory, each labeled with the guide revision it follows. There are no materials yet. The Markdown guide is always the maintained version; a PDF or an older video may show an earlier workflow.
 
 [CONTRIBUTING.md](CONTRIBUTING.md) has the layout, status conventions, and update process. [AGENTS.md](AGENTS.md) has the working rules for contributors and agents.
 

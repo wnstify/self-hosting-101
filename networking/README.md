@@ -4,6 +4,7 @@ Guides for DNS, routing, private networks, reverse proxies, and TLS will live he
 
 | Guide | Status |
 |---|---|
+| [Self-host a Pangolin server](pangolin-selfhosted/README.md) on a dedicated VPS, with CrowdSec: the public entry point for published apps | Available |
 | [Self-host a NetBird server](netbird-selfhosted/README.md) on a dedicated VPS. Optional: the series default is NetBird Cloud | Available |
 
 The [Proxmox guide](../infrastructure/proxmox-hetzner/README.md) covers base networking for its installation only.
