@@ -43,7 +43,7 @@ fi
 installer="$(fetch_installer "$version" "$expected_sha")"
 
 info "Checking sudo (it may ask for your password once)"
-sudo -v
+sudo true
 
 log="$INSTALLER_DIR/install.log"
 info "Running Pangolin's installer; its output goes to $log"

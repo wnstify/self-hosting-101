@@ -46,7 +46,7 @@ if [[ $installed -eq 0 ]]; then
   installer="$(fetch_installer "$version" "$expected_sha")"
 
   info "Checking sudo (it may ask for your password once)"
-  sudo -v
+  sudo true
 
   info "Stopping the stack; the installer needs ports 80 and 443 free"
   (cd "$PANGOLIN_DIR" && docker compose down)
@@ -57,7 +57,7 @@ if [[ $installed -eq 0 ]]; then
   # directory. The MaxMind question depends on whether the databases exist.
   rc=0
   run_answered "$log" "$PANGOLIN_DIR" \
-    "(update the MaxMind databases|download the MaxMind GeoLite2 databases)|n" \
+    "the MaxMind (GeoLite2 )?databases|n" \
     "Would you like to install CrowdSec\?|y" \
     "Are you willing to manage CrowdSec\?|y" \
     "Are these values correct\?|y" \

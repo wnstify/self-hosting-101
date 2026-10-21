@@ -6,9 +6,9 @@ Run your own [Pangolin](https://github.com/fosrl/pangolin) on a small dedicated 
 
 | Detail | Value |
 |---|---|
-| Status | Draft. The steps ran by hand on 2026-10-20 and 2026-10-21; the scripts have not had their live run yet. See the [tested configuration](tested-configuration.md) |
+| Status | Available. See the [tested configuration](tested-configuration.md) |
 | Video | Recording (episode 2) |
-| Last live test | 2026-10-21, Hetzner Cloud, Debian 13: the same steps by hand. See [tested configuration](tested-configuration.md) |
+| Last live test | 2026-10-21, Debian 13: the scripts on a fresh server, after the same steps by hand on 2026-10-20 and 2026-10-21. See [tested configuration](tested-configuration.md) |
 | Materials | None yet |
 
 ## Hosted or self-hosted?

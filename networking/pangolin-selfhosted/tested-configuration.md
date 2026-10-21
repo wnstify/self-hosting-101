@@ -28,9 +28,33 @@ What passed:
 
 Not verified in this run: the server type and RAM were not recorded here, reboot persistence, and the scripts in this directory.
 
-## Scripts
+## Scripted run, 2026-10-21
 
-`preflight.sh`, `install-pangolin.sh`, `install-crowdsec.sh`, `verify.sh`, `ban-test.sh` and `lib.sh` have not had a live run yet. Until they do, the guide stays Draft.
+The scripts ran on a second fresh server, hardened first with the hardening guide's scripts (`ALLOW_PORTS="80/tcp 443/tcp 51820/udp 21820/udp"`), driven by an agent over SSH without a terminal, with passwordless sudo through a password-manager SSH agent.
+
+| Item | Value |
+|---|---|
+| Server | Debian 13.6 x86_64 cloud image, 1921 MB RAM, 38 GB disk, public IPv4, no IPv6; provider and server type not recorded |
+| Docker | Docker 29.9.2, Compose v5.6.0, jq 1.7.1 from `shared/docker/install-docker.sh` |
+| Pangolin | installer 1.24.0 from the GitHub release, SHA-256 matched; `fosrl/pangolin:1.24.0`, `fosrl/gerbil:1.5.2`, `traefik:v3.7`, `crowdsecurity/crowdsec:latest` |
+
+What passed:
+
+- `preflight.sh`: "Preflight passed." before and after Docker.
+- `install-pangolin.sh`: all 14 prompts answered in the expected order in the installer's plain prompt mode; three containers running; a trusted Let's Encrypt certificate within about a minute.
+- The setup token, admin account and first organization, done by the owner.
+- `install-crowdsec.sh`: four prompts answered; "CrowdSec installed successfully!"; the three changes applied; crowdsec healthy; "CrowdSec is on, with the three defaults changed."
+- `verify.sh`: 16 `PASS`, "All Pangolin checks passed." on the first run after CrowdSec.
+- `ban-test.sh` from the workstation: 200, 403 while banned, 200 after the ban was lifted; "Ban test passed."
+
+Two bugs found and fixed during this run, both before the installer changed anything:
+
+- `install-pangolin.sh` and `install-crowdsec.sh` checked sudo with `sudo -v`, which asks for a password even for a `NOPASSWD` user when another sudoers entry (Debian's `%sudo` line) has none, and fails without a terminal. They now run `sudo true`.
+- The MaxMind pattern in `install-crowdsec.sh` contained `|` inside parentheses, which `run_answered` took as the pattern separator, so the regex was invalid and the installer waited at its first question with the stack down. The pattern is now `the MaxMind (GeoLite2 )?databases`. A pattern must not contain `|`.
+
+Not verified in this run: reboot persistence and the padlock in the owner's browser. The `crowdsec` container publishes `6060/tcp` on all interfaces; Docker bypasses ufw, so the cloud firewall is what keeps it closed.
+
+## Scripts
 
 Local checks, `tests/test-local.sh`: domain and email validation, the pinned checksum's format, the refusals of both install scripts before any download, the answer runner against a fake installer (answer order, a skipped optional question, an unexpected question stopping the run), the setup token kept out of log excerpts, and the three CrowdSec changes on synthetic files, including the refusals for a custom trusted-proxy list, a placeholder bouncer key and a missing access log.
 
