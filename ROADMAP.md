@@ -25,12 +25,10 @@ You can type every command yourself, or hand a guide to an AI agent with the [st
 | 1 | [Proxmox on bare metal](infrastructure/proxmox-hetzner/README.md) | Available. See the [tested configuration](infrastructure/proxmox-hetzner/tested-configuration.md) | Recording |
 | 2 | [Self-hosted Pangolin](networking/pangolin-selfhosted/README.md): the public entry point on its own hardened Debian 13 VPS, Pangolin's installer pinned and checksummed, CrowdSec with three changed defaults and a ban test | Draft until the scripts' live run. See the [tested configuration](networking/pangolin-selfhosted/tested-configuration.md) | Recording |
 | 3 | [Self-hosted NetBird](networking/netbird-selfhosted/README.md): Cloud or self-hosted, a hardened Debian 13 VPS, NetBird's installer pinned and checksummed | Available. See the [tested configuration](networking/netbird-selfhosted/tested-configuration.md) | Recording |
-| 4 | Single node and guest networking: a Proxmox SDN zone with a private subnet, address plan, host firewall | Planned | Planned |
+| 4 | Lock down Proxmox: a Proxmox SDN zone with a private subnet and address plan, NetBird on the host with a route to that subnet for SSH and server access, Newt (Pangolin's tunnel client) in a container with the Proxmox GUI behind Pangolin, access rules and CrowdSec, the host firewall, and public ports closed with the provider console as the way back in | Planned | Planned |
 | 5 | AdGuard Home as the first guest: DNS for all guests, encrypted upstream, start order, internal name resolution | Planned | Planned |
-| 6 | NetBird on the host: route to the private subnet, SSH over the private network, public ports closed with the provider console as the way back in | Planned | Planned |
-| 7 | Pangolin connection: Newt, Pangolin's tunnel client, in a container, first published app, Proxmox GUI behind Pangolin with access rules and CrowdSec | Planned | Planned |
-| 8 | Backups: destination, schedule, and a restore on camera | Planned | Planned |
-| 9 onward | Applications, one per episode, each assigned a tier before installation, built on the [Compose recipes](applications/docker-recipes/README.md) | Planned | Planned |
+| 6 | Backups: destination, schedule, and a restore on camera | Planned | Planned |
+| 7 onward | Applications, one per episode, each assigned a tier before installation, built on the [Compose recipes](applications/docker-recipes/README.md) | Planned | Planned |
 
 Somewhere in the middle I want one episode where something breaks and gets recovered. A failed boot, a lost Pangolin VPS, or a wrong firewall rule.
 

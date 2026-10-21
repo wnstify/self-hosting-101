@@ -28,7 +28,7 @@ You end up with:
 - your admin account and first organization;
 - CrowdSec with its Traefik bouncer, with three of its defaults changed, and a ban test that proves it blocks.
 
-Out of scope: connecting sites and publishing apps (episode 7), the Enterprise Edition, PostgreSQL, SMTP, IPv6, high availability, and a CrowdSec bouncer for SSH. Pangolin's own documentation covers them; links are at the end.
+Out of scope: connecting sites and publishing apps (episode 4), the Enterprise Edition, PostgreSQL, SMTP, IPv6, high availability, and a CrowdSec bouncer for SSH. Pangolin's own documentation covers them; links are at the end.
 
 **Give Pangolin its own server.** It is the public way in to everything you publish. If it shared a box with your apps and that box broke, you would lose the tool you need to reach them. For the same reason, **keep SSH to this server open on its public address; never make Pangolin the only way into the Pangolin server itself.** Limit port 22 to your own fixed address if you have one.
 
@@ -230,7 +230,7 @@ Also check, yourself:
 
 ## Next steps
 
-Connect your first site and publish an app behind Pangolin's login. That is episode 7 in this series. Until then, Pangolin's documentation covers it:
+Connect your first site and publish an app behind Pangolin's login. That is episode 4 in this series. Until then, Pangolin's documentation covers it:
 
 - [Pangolin documentation](https://docs.pangolin.net/)
 - [CrowdSec community guide](https://docs.pangolin.net/self-host/community-guides/crowdsec), including a firewall bouncer for SSH on the host
