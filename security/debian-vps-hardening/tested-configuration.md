@@ -23,14 +23,19 @@ What passed:
 - ufw allowing 22/tcp, 80/tcp, 443/tcp, 3478/udp; enabled with its SSH warning answered; status active, deny incoming.
 - unattended-upgrades already installed and enabled on the Hetzner image, both periodic values `"1"`.
 
-## Scripts
+## Scripts, live run 2026-10-20
 
-`harden.sh`, `verify-ssh.sh` and `lib.sh` were written after that run from the same steps. Local checks only so far:
+`harden.sh`, `verify-ssh.sh` and `lib.sh` ran on a freshly rebuilt server of the same type, driven by an AI agent with the `harden-debian-vps` skill (called from the NetBird skill) and recorded for the self-hosted NetBird episode. Choices: passwordless sudo, SSH from anywhere, ports 80/tcp, 443/tcp and 3478/udp.
 
-- `bash -n` on every script.
-- `tests/test-lib.sh` for user names, SSH sources, port lists and key detection.
+What passed:
 
-A live run of the scripts on a fresh server is pending. Until then the guide stays Draft.
+- First login as root with a key. Stale `known_hosts` entries for the rebuilt server were removed with `ssh-keygen -R`; the new ed25519 host key was accepted on first connect.
+- `harden.sh user`: ended with "Next: keep this root session open". A second login as the admin user, with `sudo -n whoami` returning `root`.
+- `harden.sh lock`: three `no` lines and "Locked."
+- `verify-ssh.sh` from the workstation: three `PASS` lines.
+- `harden.sh firewall`: ufw active with 22/tcp, 80/tcp, 443/tcp and 3478/udp; unattended-upgrades enabled, both periodic values `"1"`.
+
+Local checks: `bash -n` on every script, and `tests/test-lib.sh` for user names, SSH sources, port lists and key detection.
 
 ## Not tested
 
@@ -38,3 +43,4 @@ A live run of the scripts on a fresh server is pending. Until then the guide sta
 - Providers other than Hetzner Cloud.
 - IPv6 (the tested server had no IPv6 address).
 - `SUDO_MODE=password` and `SSH_ALLOW_FROM` on a live server.
+- A reboot after hardening.

@@ -24,7 +24,7 @@ You can type every command yourself, or hand a guide to an AI agent with the [st
 |---|---|---|---|
 | 1 | Prerequisites: password manager with an SSH agent and an ed25519 key, a domain, a NetBird Cloud account and client (or a self-hosted server, episode 3), a self-hosted Pangolin VPS, and setting up the agent with this repository | Planned, as separate guides under security and networking | Planned, one video with chapters |
 | 2 | [Proxmox on bare metal](infrastructure/proxmox-hetzner/README.md) | Available. See the [tested configuration](infrastructure/proxmox-hetzner/tested-configuration.md) | Recording |
-| 3 | [Self-hosted NetBird](networking/netbird-selfhosted/README.md): Cloud or self-hosted, a hardened Debian 13 VPS, NetBird's installer pinned and checksummed | Draft | Recording |
+| 3 | [Self-hosted NetBird](networking/netbird-selfhosted/README.md): Cloud or self-hosted, a hardened Debian 13 VPS, NetBird's installer pinned and checksummed | Available. See the [tested configuration](networking/netbird-selfhosted/tested-configuration.md) | Recording |
 | 4 | Single node and guest networking: a Proxmox SDN zone with a private subnet, address plan, host firewall | Planned | Planned |
 | 5 | AdGuard Home as the first guest: DNS for all guests, encrypted upstream, start order, internal name resolution | Planned | Planned |
 | 6 | NetBird on the host: route to the private subnet, SSH over the private network, public ports closed with the provider console as the way back in | Planned | Planned |

@@ -6,9 +6,9 @@ Turn a fresh Debian 13 VPS into a server you log in to with a key only: an admin
 
 | Detail | Value |
 |---|---|
-| Status | Draft |
+| Status | Available. See the [tested configuration](tested-configuration.md) |
 | Video | Recording, as part of the [self-hosted NetBird](../../networking/netbird-selfhosted/README.md) episode |
-| Last live test | Not yet for these scripts. The same steps ran by hand on a Hetzner CPX12 on 2026-10-20, see [tested configuration](tested-configuration.md) |
+| Last live test | 2026-10-20, Hetzner CPX12, Debian 13: the scripts on a fresh server and the same steps by hand. See [tested configuration](tested-configuration.md) |
 | Materials | None yet |
 
 ## What this guide does
