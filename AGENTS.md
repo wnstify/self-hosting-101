@@ -15,6 +15,7 @@ Read [README.md](README.md) for navigation and [CONTRIBUTING.md](CONTRIBUTING.md
 
 - Before operating on a server, read the topic's README, any AGENTS.md files along its path, and its linked skill if present.
 - For the Proxmox guide, that is [the topic rules](infrastructure/proxmox-hetzner/AGENTS.md), [the installation guide](infrastructure/proxmox-hetzner/README.md), and [the installation skill](skills/install-proxmox-hetzner/SKILL.md). Its helpers and tests live in `infrastructure/proxmox-hetzner/`.
+- For a self-hosted NetBird server, that is [the topic rules](networking/netbird-selfhosted/AGENTS.md), [the guide](networking/netbird-selfhosted/README.md), and [the skill](skills/install-netbird-selfhosted/SKILL.md), which uses [the hardening skill](skills/harden-debian-vps/SKILL.md). Their scripts live in `networking/netbird-selfhosted/` and `security/debian-vps-hardening/`.
 - Use the shared scripts and verification steps. Do not write a separate installation procedure for agents.
 - Do not use planned topics or unfilled templates as deployment instructions.
 
